@@ -183,6 +183,8 @@ body,
   appearance: none;
   border: none;
   cursor: pointer;
+  position: relative;
+  z-index: 0;
   font-family: 'Syne', 'Nunito', sans-serif;
   font-weight: 800;
   font-size: 1.15rem;
@@ -191,28 +193,31 @@ body,
   background: #ffe3a8;
   padding: 1rem 2.75rem;
   border-radius: 4px;
-  transition: transform 0.15s ease, background 0.15s ease, filter 0.15s ease;
+  /* Geen scale-animatie: die vergroot de hitbox over Host/Search heen */
+  transition: background 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
   animation: playIdle 2.8s ease-in-out infinite;
 }
 
 .btn-play:hover {
   background: #fff0c8;
-  transform: translateY(-2px) scale(1.02);
   animation: none;
   filter: brightness(1.05);
+  box-shadow: 0 6px 18px rgba(20, 10, 30, 0.28);
 }
 
 .btn-play:active {
-  transform: scale(0.98);
+  filter: brightness(0.97);
 }
 
 @keyframes playIdle {
   0%,
   100% {
-    transform: scale(1);
+    filter: brightness(1);
+    box-shadow: 0 0 0 transparent;
   }
   50% {
-    transform: scale(1.035);
+    filter: brightness(1.04);
+    box-shadow: 0 4px 14px rgba(20, 10, 30, 0.18);
   }
 }
 
@@ -225,11 +230,26 @@ body,
 }
 
 .start-mp-actions {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 1.25rem 1.75rem;
-  margin-top: 0.85rem;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin-top: 1.35rem;
+  isolation: isolate;
+}
+
+/* Ruime klikzone — los van de PLAY-knop erboven */
+.start-mp-actions .btn-text {
+  position: relative;
+  z-index: 2;
+  padding: 0.7rem 0.85rem;
+  margin: 0;
+  min-height: 2.75rem;
+  line-height: 1.2;
+  color: rgba(255, 244, 250, 0.92);
 }
 
 .lobby-overlay {
