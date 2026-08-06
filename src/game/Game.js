@@ -500,6 +500,16 @@ export class Game {
     });
 
     window.addEventListener('keydown', (e) => {
+      const t = e.target;
+      if (
+        t instanceof Element &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT' ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
       if (e.code === 'Escape' && this.running && !this.matchOver) {
         if (this.paused) this.resume();
         else this.pause();

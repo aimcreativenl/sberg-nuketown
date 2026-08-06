@@ -111,7 +111,16 @@ export class Player {
 
   bindInput(dom) {
     this._dom = dom;
+    const isTypingTarget = (t) => {
+      if (!t || !(t instanceof Element)) return false;
+      const tag = t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (t.isContentEditable) return true;
+      return !!t.closest?.('input, textarea, select, [contenteditable="true"]');
+    };
     this._onKeyDown = (e) => {
+      // Lobby / join forms must receive WASD digits etc. — don't steal keys while typing
+      if (isTypingTarget(e.target)) return;
       this.keys.add(e.code);
       // Ignore OS key-repeat so one R press = one reload request
       if (e.code === 'KeyR' && !e.repeat) this.reloadPressed = true;
@@ -120,7 +129,10 @@ export class Player {
       if (!e.repeat && (e.code === 'Digit2' || e.code === 'Numpad2')) this.weaponSlotPressed = 1;
       if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) e.preventDefault();
     };
-    this._onKeyUp = (e) => this.keys.delete(e.code);
+    this._onKeyUp = (e) => {
+      if (isTypingTarget(e.target)) return;
+      this.keys.delete(e.code);
+    };
     this._onMouseMove = (e) => {
       if (document.pointerLockElement !== dom) return;
       this.mouse.dx += e.movementX;
