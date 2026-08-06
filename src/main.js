@@ -1,10 +1,36 @@
 import { Game } from './game/Game.js';
 import { applyToGame } from './settings/Settings.js';
+import { envSignalUrl, hasRemoteSignalHub } from './net/rtcConfig.js';
 
 const canvas = document.getElementById('game-canvas');
 if (!canvas) {
   throw new Error('Missing #game-canvas');
 }
+
+/**
+ * Wake the Render free-tier hub as soon as someone opens the Vercel site.
+ * Fire-and-forget; hub already sends Access-Control-Allow-Origin: *.
+ */
+function pokeRemoteSignalHub() {
+  if (!hasRemoteSignalHub()) return;
+  const signal = envSignalUrl() || (typeof window !== 'undefined' && window.__SBARG_SIGNAL_URL__) || '';
+  let health = 'https://sbarg-nuketown-hub.onrender.com/health';
+  try {
+    if (signal) {
+      const u = new URL(String(signal).replace(/^ws/i, 'http'));
+      health = `${u.origin}/health`;
+    }
+  } catch (_) {
+    /* keep default */
+  }
+  fetch(health, { method: 'GET', mode: 'cors', cache: 'no-store' }).catch(() => {});
+}
+
+pokeRemoteSignalHub();
+// Re-poke when tab becomes visible again (helps after idle)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) pokeRemoteSignalHub();
+});
 
 // Kick off S'Berg Nuketown
 const game = new Game(canvas);

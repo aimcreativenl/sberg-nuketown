@@ -40,6 +40,31 @@ Flow you want:
 
 ---
 
+## Keep-alive (Render Free wakker houden)
+
+Render Free valt ~15 min na idle in slaap. Er staan **drie lagen** klaar:
+
+### 1. GitHub Action (automatisch na push)
+`.github/workflows/keep-render-awake.yml` pingt `/health` elke **10 minuten**.  
+Check: GitHub → repo → **Actions** → “Keep Render hub awake” → eventueel **Enable** als Actions gevraagd worden.
+
+### 2. Site wekt hub bij openen
+Elke bezoek aan de Vercel-game doet een stille `fetch` naar `/health` (ook bij tab weer zichtbaar).
+
+### 3. Extra zeker (aanbevolen, 2 minuten werk)
+Gratis monitor: [https://uptimerobot.com](https://uptimerobot.com)
+
+- Monitor type: **HTTPS**
+- URL: `https://sbarg-nuketown-hub.onrender.com/health`
+- Interval: **5 minutes**
+
+Dat is in de praktijk de stevigste gratis optie (GitHub cron kan soms vertragen).
+
+### Echte 100% always-on
+Alleen met een **betaald** Render-plan (geen spin-down). Keep-alive op Free is “bijna altijd wakker”, geen SLA-garantie van Render.
+
+---
+
 ## Stap B — Vercel (game site)
 
 1. Ga naar [https://vercel.com](https://vercel.com) → login
