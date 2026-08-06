@@ -62,6 +62,23 @@ for (const d of doors) {
   mgr.toggle(d); // close again
 }
 
+// MP helpers: absolute setOpen + net state round-trip
+{
+  const d0 = doors[0];
+  mgr.setOpen(d0.name, true);
+  assert(d0.open === true, 'setOpen by id opens');
+  mgr.setOpen(d0.name, true);
+  assert(d0.open === true, 'setOpen idempotent');
+  const net = mgr.toNetState();
+  assert(Array.isArray(net) && net.length === doors.length, 'toNetState length');
+  assert(net.some((e) => e.id === d0.name && e.open === true), 'toNetState includes open door');
+  mgr.setOpen(d0.name, false);
+  assert(d0.open === false, 'setOpen closes');
+  mgr.applyNetState([{ id: d0.name, open: true }]);
+  assert(d0.open === true, 'applyNetState opens');
+  mgr.setOpen(d0.name, false);
+}
+
 const report = { ok: failures.length === 0, doorCount: doors.length, names, panels, failures };
 console.log(JSON.stringify(report, null, 2));
 if (failures.length) {

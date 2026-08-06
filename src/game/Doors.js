@@ -73,11 +73,30 @@ export class DoorManager {
     return best;
   }
 
+  /** @param {string} id door.name */
+  getById(id) {
+    if (!id) return null;
+    return this.doors.find((d) => d.name === id) || null;
+  }
+
+  /**
+   * Set absolute open state (MP host authority / event apply). Idempotent.
+   * @param {object|string} doorOrId
+   * @param {boolean} open
+   */
+  setOpen(doorOrId, open) {
+    const door = typeof doorOrId === 'string' ? this.getById(doorOrId) : doorOrId;
+    if (!door) return null;
+    const next = !!open;
+    if (door.open === next) return door;
+    door.open = next;
+    if (door.open && door.collider) this._setSolid(door, false);
+    return door;
+  }
+
   toggle(door) {
     if (!door) return false;
-    door.open = !door.open;
-    if (door.open && door.collider) this._setSolid(door, false);
-    return true;
+    return !!this.setOpen(door, !door.open);
   }
 
   tryToggleAt(pos) {
@@ -85,6 +104,20 @@ export class DoorManager {
     if (!d) return null;
     this.toggle(d);
     return d;
+  }
+
+  /** Compact door states for MP snapshots / late join. */
+  toNetState() {
+    return this.doors.map((d) => ({ id: d.name, open: !!d.open }));
+  }
+
+  /** Apply host door list (snapshot or full sync). */
+  applyNetState(list) {
+    if (!list?.length) return;
+    for (const entry of list) {
+      if (!entry?.id) continue;
+      this.setOpen(entry.id, !!entry.open);
+    }
   }
 
   /** Bot: open a closed door near feet if present. */

@@ -69,6 +69,8 @@ export class NetPawn {
         radius: this.radius,
         height: this.height,
         position: this.position,
+        // Host sim remotes must not block the local host capsule
+        remoteGhost: true,
       });
     } else {
       this._rapier = null;
@@ -380,6 +382,7 @@ export class NetPawn {
       deaths: this.deaths,
       weapon: this.weaponSlot,
       aiming: this.aiming,
+      outfitIndex: this.outfitIndex | 0,
     };
   }
 }

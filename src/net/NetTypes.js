@@ -64,17 +64,20 @@ export const INPUT_HZ = 30;
  * @property {'snapshot'} t
  * @property {number} tick
  * @property {PlayerSnap[]} players
+ * @property {Array<{ id: string, open: boolean }>} [doors]
  */
 
 /**
  * Host → all: discrete combat / match event.
  * @typedef {Object} EventMsg
  * @property {'event'} t
- * @property {'hit'|'kill'|'respawn'|'match_end'} kind
+ * @property {'hit'|'kill'|'respawn'|'match_end'|'door'} kind
  * @property {string} [attackerId]
  * @property {string} [victimId]
  * @property {number} [damage]
  * @property {boolean} [headshot]
  * @property {string} [winnerId]
+ * @property {string} [doorId]
+ * @property {boolean} [open]
  * @property {object} [extra]
  */

@@ -658,6 +658,16 @@ export class Game {
       return;
     }
 
+    if (msg.kind === 'door') {
+      const doorId = msg.doorId || msg.extra?.doorId;
+      const open = msg.open ?? msg.extra?.open;
+      if (doorId != null && open != null) {
+        this.doors.setOpen(doorId, !!open);
+        this.audio.playDonutPickup?.();
+      }
+      return;
+    }
+
     if (msg.kind === 'match_end') {
       const won = msg.winnerId === localId;
       this._endMatch(won);
@@ -872,6 +882,7 @@ export class Game {
       physics: this.physics,
       getLocalPlayer: () => this.player,
       getWeapons: () => this.weapons,
+      getDoors: () => this.doors,
       onEvent: (ev) => this._onMpEvent(ev),
     });
     this.mpMatch.attachScene(this.scene);
@@ -1600,6 +1611,8 @@ export class Game {
           : 'Press E to open door';
         prompt.classList.remove('hidden');
       }
+      // MP: host owns door toggles via interact input — don't flip locally (desyncs physics)
+      if (this.mpMatch) return;
       if (this.player.consumeUsePress()) {
         this.doors.toggle(door);
         this.audio.playDonutPickup?.(); // light click feedback

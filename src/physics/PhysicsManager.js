@@ -45,6 +45,18 @@ const TIER_EPS = 0.04;
 /** Minimum vertical gap before a floor is considered to be floating "above" a step's walk surface at all (avoids flagging same-level floors due to float noise). */
 const CEILING_MIN_GAP = 0.05;
 
+/**
+ * Rapier interaction groups (membership low 16 + filter high 16).
+ * Local player + bots: collide with world and each other.
+ * MP remote pawns: world only — otherwise guests felt like invisible walls on the host.
+ */
+const COL_GROUP_WORLD = 0x0001;
+const COL_GROUP_PLAYER = 0x0002;
+/** membership=PLAYER, filter=WORLD|PLAYER */
+const PLAYER_COLLISION_GROUPS = ((COL_GROUP_WORLD | COL_GROUP_PLAYER) << 16) | COL_GROUP_PLAYER;
+/** membership=PLAYER (unused bit ok), filter=WORLD only */
+const REMOTE_PAWN_COLLISION_GROUPS = (COL_GROUP_WORLD << 16) | COL_GROUP_PLAYER;
+
 export class PhysicsManager {
   /** Shared init promise so multiple callers can safely await init concurrently. */
   static _initPromise = null;
@@ -563,11 +575,12 @@ export class PhysicsManager {
 
   /**
    * Create a kinematic capsule character controller.
-   * @param {{ radius?: number, height?: number, position: { x: number, y: number, z: number } }} opts
+   * @param {{ radius?: number, height?: number, position: { x: number, y: number, z: number }, remoteGhost?: boolean }} opts
    *   `position` is the EYE position (matches `Player.position`), not feet.
+   *   `remoteGhost` — MP remote pawn: collide with map only, not other characters.
    * @returns {{ body: object, collider: object, controller: object, verticalVel: number, grounded: boolean, height: number, radius: number }}
    */
-  createPlayerController({ radius = PLAYER_RADIUS, height = PLAYER_HEIGHT, position }) {
+  createPlayerController({ radius = PLAYER_RADIUS, height = PLAYER_HEIGHT, position, remoteGhost = false }) {
     const RAPIER_ = this.RAPIER;
     // Capsule = cylinder (halfHeight*2) + two hemispherical caps (radius each).
     const capsuleHalfHeight = Math.max(0.02, (height - 2 * radius) / 2);
@@ -580,7 +593,10 @@ export class PhysicsManager {
         position.z
       )
     );
-    const colliderDesc = RAPIER_.ColliderDesc.capsule(capsuleHalfHeight, radius).setFriction(0);
+    const groups = remoteGhost ? REMOTE_PAWN_COLLISION_GROUPS : PLAYER_COLLISION_GROUPS;
+    const colliderDesc = RAPIER_.ColliderDesc.capsule(capsuleHalfHeight, radius)
+      .setFriction(0)
+      .setCollisionGroups(groups);
     const collider = this.world.createCollider(colliderDesc, body);
 
     const controller = this.world.createCharacterController(0.01);

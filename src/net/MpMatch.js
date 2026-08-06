@@ -11,7 +11,7 @@ const DMG_HEAD = 42;
 const SHOT_RANGE = 80;
 const HEAD_RADIUS = 0.24;
 const CHEST_RADIUS = 0.32;
-const CORRECT_DIST = 2.5;
+const CORRECT_DIST = 3.25;
 
 /**
  * Orchestrates one network match (host-authoritative combat sync).
@@ -27,6 +27,7 @@ export class MpMatch {
    *   physics?: import('../physics/PhysicsManager.js').PhysicsManager|null,
    *   getLocalPlayer?: () => import('../game/Player.js').Player|null,
    *   getWeapons?: () => object|null,
+   *   getDoors?: () => import('../game/Doors.js').DoorManager|null,
    *   onEvent?: (msg: import('./NetTypes.js').EventMsg) => void,
    * }} opts
    */
@@ -39,6 +40,7 @@ export class MpMatch {
     physics = null,
     getLocalPlayer = null,
     getWeapons = null,
+    getDoors = null,
     onEvent = null,
   }) {
     this.session = session;
@@ -49,6 +51,7 @@ export class MpMatch {
     this.physics = physics || null;
     this.getLocalPlayer = getLocalPlayer;
     this.getWeapons = getWeapons;
+    this.getDoors = getDoors;
     this.onEvent = onEvent;
 
     /** @type {Map<string, NetPawn>} */
@@ -66,6 +69,8 @@ export class MpMatch {
     /** @type {THREE.Vector3[]} */
     this._spawnPoints = [];
     this._matchEnded = false;
+    /** Rising-edge tracker for InputFrame.interact per pawn id. */
+    this._prevInteract = new Map();
   }
 
   /** @param {THREE.Scene} scene */
@@ -87,6 +92,7 @@ export class MpMatch {
     this._inputAcc = 0;
     this._pendingEvents = [];
     this._pendingSnap = null;
+    this._prevInteract.clear();
 
     const spawns = (spawnPoints || this.mapData?.spawnPoints || []).map((s, i) => {
       if (s?.clone) return s.clone();
@@ -184,7 +190,7 @@ export class MpMatch {
       physics: this.physics,
     };
 
-    // 1. Sample local input → local pawn (peek — don't consume reload/use)
+    // 1. Sample local input → local pawn (peek reload; claim E for host door authority)
     const localPawn = this.pawns.get(this.localId);
     if (localPawn && player) {
       this._inputSeq += 1;
@@ -196,6 +202,11 @@ export class MpMatch {
         aimHold: !!player.buttons?.right,
         peek: true,
       });
+      // Claim E only near a door — leave medkit E for Game._updateInteract
+      const nearDoor = this.getDoors?.()?.getNearby?.(player.position);
+      if (nearDoor && typeof player.consumeUsePress === 'function' && player.consumeUsePress()) {
+        frame.interact = true;
+      }
       localPawn.setInput(frame);
       // Host local body stays on Player.update — mirror pose into the pawn for combat/snaps
       localPawn.position.copy(player.position);
@@ -242,25 +253,30 @@ export class MpMatch {
       }
     }
 
-    // 2. Step remote pawns only (local uses Player.update)
+    // 2. Host-authoritative doors (E / interact rising edge)
+    this._hostDoors();
+
+    // 3. Step remote pawns only (local uses Player.update)
     for (const pawn of this.pawns.values()) {
       if (!pawn.alive || pawn.id === this.localId) continue;
       pawn.stepMovement(dt, world);
     }
 
-    // 3. Combat
+    // 4. Combat
     this._hostCombat(dt, ctx);
 
-    // 4. Snapshots
+    // 5. Snapshots (include door states for late-join / desync recovery)
     this.tick += 1;
     this._snapAcc += dt;
     const snapInterval = 1 / SNAPSHOT_HZ;
     if (this._snapAcc >= snapInterval) {
       this._snapAcc %= snapInterval;
+      const doors = this.getDoors?.();
       const snap = {
         t: NET_MSG.snapshot,
         tick: this.tick,
         players: [...this.pawns.values()].map((p) => p.toSnap()),
+        doors: doors?.toNetState?.() || undefined,
       };
       this.session?.sendGame?.(snap);
     }
@@ -404,6 +420,32 @@ export class MpMatch {
     this._pendingEvents.push(ev);
   }
 
+  /** Rising-edge interact → toggle nearest door; broadcast absolute open state. */
+  _hostDoors() {
+    const doors = this.getDoors?.();
+    if (!doors) return;
+
+    for (const pawn of this.pawns.values()) {
+      if (!pawn.alive) {
+        this._prevInteract.set(pawn.id, false);
+        continue;
+      }
+      const now = !!pawn.lastInput?.interact;
+      const was = !!this._prevInteract.get(pawn.id);
+      this._prevInteract.set(pawn.id, now);
+      if (!now || was) continue;
+
+      const door = doors.tryToggleAt(pawn.position);
+      if (!door?.name) continue;
+      this._emitEvent({
+        t: NET_MSG.event,
+        kind: 'door',
+        doorId: door.name,
+        open: !!door.open,
+      });
+    }
+  }
+
   _pickSpawn() {
     const list = this._spawnPoints;
     if (!list.length) return new THREE.Vector3(0, PLAYER_HEIGHT, 8);
@@ -436,6 +478,11 @@ export class MpMatch {
         aimHold: !!player.buttons?.right,
         peek: true,
       });
+      // Claim E only near a door — leave medkit E for Game._updateInteract
+      const nearDoor = this.getDoors?.()?.getNearby?.(player.position);
+      if (nearDoor && typeof player.consumeUsePress === 'function' && player.consumeUsePress()) {
+        frame.interact = true;
+      }
       frame.id = this.localId;
       this.session?.sendGame?.(frame);
     }
@@ -457,6 +504,12 @@ export class MpMatch {
   _applySnapshot(msg, dt, ctx) {
     this._lastSnapAt =
       typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+    // Door truth from host (also covered by door events; snapshot heals desync / late join)
+    if (msg.doors?.length) {
+      this.getDoors?.()?.applyNetState?.(msg.doors);
+    }
+
     const players = msg.players || [];
     for (const snap of players) {
       let pawn = this.pawns.get(snap.id);
@@ -495,8 +548,10 @@ export class MpMatch {
       // Skip harsh pose correction right after a tab wake — it feels like a full reset.
       if (!ctx.wakeGrace && localSnap.alive && player.alive) {
         const auth = new THREE.Vector3(localSnap.x, localSnap.y, localSnap.z);
-        const dist = player.position.distanceTo(auth);
-        if (dist > CORRECT_DIST) {
+        // Prefer horizontal correction — vertical door/floor fights felt like sticky walls
+        const dxz = Math.hypot(player.position.x - auth.x, player.position.z - auth.z);
+        const dy = Math.abs(player.position.y - auth.y);
+        if (dxz > CORRECT_DIST || dy > CORRECT_DIST + 1.5) {
           const keys = player.keys;
           const moving =
             keys?.has?.('KeyW') ||
@@ -504,11 +559,15 @@ export class MpMatch {
             keys?.has?.('KeyS') ||
             keys?.has?.('KeyD');
           const t = moving
-            ? Math.min(0.15, dt * 2)
-            : dist > 8
-              ? 0.35
-              : Math.min(0.5, dt * 6);
-          player.position.lerp(auth, t);
+            ? Math.min(0.12, dt * 1.6)
+            : dxz > 8 || dy > 8
+              ? 0.28
+              : Math.min(0.4, dt * 5);
+          player.position.x = THREE.MathUtils.lerp(player.position.x, auth.x, t);
+          player.position.z = THREE.MathUtils.lerp(player.position.z, auth.z, t);
+          if (dy > 1.25) {
+            player.position.y = THREE.MathUtils.lerp(player.position.y, auth.y, t);
+          }
           if (player._rapier && player.physics) {
             player.physics.teleport?.(
               player._rapier,

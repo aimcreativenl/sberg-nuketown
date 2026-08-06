@@ -23,7 +23,7 @@ export class RemoteAvatars {
     const character = new VoxelCharacter({
       name,
       outfitIndex: outfitIndex | 0,
-      isPlayer: true,
+      isPlayer: false,
     });
     this.scene.add(character.mesh);
     entry = { character, outfitIndex: outfitIndex | 0 };
