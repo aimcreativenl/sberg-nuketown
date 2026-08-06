@@ -1,6 +1,6 @@
-# Pastel Nuketown
+# S'Berg Nuketown
 
-A pastel voxel Free-For-All FPS inspired by Nuketown — built with **Three.js** + Vite.
+Pastel voxel Free-For-All FPS (Nuketown-achtig) — **Three.js** + Vite + Rapier + optional online listen-server.
 
 ## Play
 
@@ -9,14 +9,18 @@ npm install
 npm run dev
 ```
 
-Open the local URL (default **http://127.0.0.1:5173/**).
+Open the local URL (default **http://127.0.0.1:5173/**).  
+**Live:** https://sberg-nuketown.vercel.app/
+
+## For AI agents / next session
+
+Start with **[`CONTINUITY.md`](CONTINUITY.md)** (status + handoff). Also: [`ROADMAP.md`](ROADMAP.md), [`DEPLOY.md`](DEPLOY.md), [`AGENTS.md`](AGENTS.md).
 
 ## Gameplay
 
-- **Mode:** Free For All — you vs 9 pastel AI bots  
-- **Win:** First to **20 kills**  
-- **Gun Game:** each kill upgrades weapons (Pistol → SMG → Shotgun → AR → Sniper)  
-- **Donuts:** eliminated enemies drop a frosted donut — run over it for **+50 Fun Points**
+- **Offline:** PLAY — you vs 9 pastel AI bots, first to **20 kills**
+- **Online:** Host Server / Search Server — invite code, lobby, WebRTC to host browser
+- **Loadout:** 1 = Pistol · 2 = M16 · E = doors / medkits
 
 ## Controls
 
@@ -26,12 +30,13 @@ Open the local URL (default **http://127.0.0.1:5173/**).
 | Space | Jump |
 | Shift | Sprint |
 | LMB | Shoot |
-| RMB | Aim Down Sights |
+| RMB | Aim / M16 scope |
 | R | Reload |
+| E | Door / medkit |
 | Esc | Pause |
+| Tab | Scoreboard |
 
 ## Stack
 
-- Three.js r185
-- Vite 8
-- Procedural voxel map, weapons, characters, particles, and Web Audio SFX
+- Three.js r185 · Vite 8 · `@dimforge/rapier3d-compat` · `ws`
+- Procedural voxel map, weapons, characters, particles, Web Audio SFX

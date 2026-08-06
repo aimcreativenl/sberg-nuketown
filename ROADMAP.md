@@ -1,3 +1,6 @@
+> Agent handoff / live status: **[`CONTINUITY.md`](CONTINUITY.md)** (update when closing a session).  
+> Also: [`AGENTS.md`](AGENTS.md), [`HANDOFF.md`](HANDOFF.md).
+
 # ROADMAP — S'Berg Nuketown
 
 Stack: Three.js r185 + Vite 8, vanilla ES modules (no React/TS). This document
@@ -185,6 +188,8 @@ for v1. Host machine is authoritative (“server owns truth”).
 - [ ] TURN relay if many home NATs fail.
 
 **Exit (MVP):** playable deathmatch on mixed networks without constant rubber-banding. **Exit (full):** 4–8 friends without desync rage-quits + reconnect.
+
+> Agent handoff: **[`CONTINUITY.md`](CONTINUITY.md)** is the live status document. Update it when closing a session.
 
 ---
 

@@ -1,17 +1,28 @@
 # Pastel Nuketown / Sbarg Nuketown — Sessie-notities & wijzigingen
 
 **Project (actueel):** `c:\Users\Gebruiker\Desktop\AI projecten\Sbarg Nuketown`  
-**Stack:** Three.js r185 + Vite (vanilla JS modules)  
-**Play:** `npm run dev` → **http://127.0.0.1:5173/**  
-**Laatst bijgewerkt:** 2026-08-04  
+**Stack:** Three.js r185 + Vite (vanilla JS modules) + Rapier + ws  
+**Play:** `npm run dev` → **http://127.0.0.1:5173/** · Live: https://sberg-nuketown.vercel.app/  
+**Laatst bijgewerkt:** 2026-08-06  
 
-> **Voor AI-agents:** lees eerst **`HANDOFF.md`** in de projectroot.  
-> Dat is de complete “waar gebleven / niet kapot maken / volgende stappen”-status.  
-> Dit CHANGELOG is chronologisch/historisch en deels verouderd van pad/naam.
+> **Voor AI-agents:** lees eerst **`CONTINUITY.md`** (dan `HANDOFF.md` / `ROADMAP.md`).  
+> Dit CHANGELOG is chronologisch; oudere secties kunnen verouderd zijn.
 
 ---
 
-## 1. Spelconcept (huidige staat)
+## 2026-08-06 — Continuity + Phase 4a + MP fixes
+
+- `CONTINUITY.md` + `AGENTS.md` als entry voor nieuwe chats  
+- Phase **4a**: InputHistory reconcile, RemoteAvatars interp, PoseHistory lag-comp (`56be586`)  
+- MP doors host-auth + remote ghost capsules (`a94989a`)  
+- Start-screen Host/Search click fix (`a8d9145`)  
+- Phase 4b / Phase 3 nog open — zie CONTINUITY §2  
+
+---
+
+## Historisch (pre-2026-08-06 — kan verouderd zijn)
+
+### Spelconcept (oud snapshot)
 
 | Item | Status |
 |------|--------|

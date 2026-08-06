@@ -1,75 +1,53 @@
-# HANDOFF — Sbarg Nuketown (voor volgende AI-agent)
+# HANDOFF — Sbarg Nuketown
 
-**Laatst bijgewerkt:** 2026-08-06 (Phase 4a net polish MVP)  
-**Workspace:** `c:\Users\Gebruiker\Desktop\AI projecten\Sbarg Nuketown`  
-**Stack:** Three.js **r185** + Vite 8 + `@dimforge/rapier3d-compat` 0.19 + `ws` 8, vanilla ES modules  
-**Play:** `npm run dev` → **http://localhost:5173/** (of 5174)  
-**LAN / signal hub:** **ws://localhost:8787/mp** (auto met `npm run dev`)  
+> **Nieuwe chat?** Lees eerst **[`CONTINUITY.md`](CONTINUITY.md)** — dat is de actuele single source of truth.  
+> Dit bestand is een korte spiegel zodat oude prompts die “HANDOFF” noemen nog kloppen.
+
+**Laatst bijgewerkt:** 2026-08-06 (Phase 4a)  
 **Live:** https://sberg-nuketown.vercel.app/ · hub https://sbarg-nuketown-hub.onrender.com  
-
-Lees **§A** eerst.
+**Repo:** https://github.com/aimcreativenl/sberg-nuketown · branch `main`
 
 ---
 
-## A. Sessie-stop (2026-08-06) — LEES DIT EERST
+## A. Sessie-stop — LEES EERST (of open CONTINUITY.md)
 
 ### A.1 Status
 
 | Blok | Status |
 |------|--------|
-| Phase 0–1 | DONE |
-| Phase 2a–2c | DONE |
-| **Phase 4a** prediction / remote interp / lag-comp | **DONE** |
-| Phase 4b reconnect / host migration | OPEN |
-| Phase 3 modes content | OPEN |
+| Phase 0–1, 2a–2c | DONE |
+| **Phase 4a** reconcile / remote interp / lag-comp | **DONE** (`56be586`) |
+| Phase 4b reconnect / migration | OPEN |
+| Phase 3 mode content (TDM/CTF/BR speelbaar) | OPEN — **aanbevolen next feature** |
 
-### A.2 Phase 4a — wat werkt
+### A.2 Recent gefixt (niet opnieuw debugggen)
 
-- Guest `InputHistory` + snapshot `ackSeq` → residual reconciliation (`MpMatch._reconcileLocal`)
-- `RemoteAvatars`: buffer + `tick()` delayed interpolation (`REMOTE_INTERP_DELAY_MS`)
-- Host `PoseHistory` per pawn → hitscan rewind ≤ `LAG_COMP_MAX_MS`
-- Door sync (host events + snapshot) blijft staan
-- Offline **PLAY** vs bots ongewijzigd
-- Test: `npm run test:mp-sync`
+| Issue | Fix | Commit |
+|-------|-----|--------|
+| Host/Search niet klikbaar onder PLAY | CSS hitbox / geen PLAY-scale | `a8d9145` |
+| Deuren desync → sticky muren / ontbrekend guest-body | Host door events + snapshot; remote ghost capsules | `a94989a` |
+| Rubber-band / laggy remotes / unfair hits | InputHistory + ackSeq; RemoteAvatars buffer; PoseHistory lag-comp | `56be586` |
 
-### A.3 Hoe testen (2 machines / 2 browsers)
+### A.3 Kernpaden
 
-1. Host Server → mode → code delen  
-2. Join (+ host address online) → P2P ready  
-3. Start → bewegen / schieten / deuren — minder rubber-band, remotes soepeler  
+`src/net/MpMatch.js` · `InputHistory.js` · `PoseHistory.js` · `RemoteAvatars.js` · `NetPawn.js` · `Game.js` · `Doors.js` · `PhysicsManager.js`
 
-### A.4 Belangrijke paden
-
-| Pad | Rol |
-|-----|-----|
-| `src/net/MpMatch.js` | host/guest + reconcile + lag-comp |
-| `src/net/InputHistory.js` | guest predicted poses by seq |
-| `src/net/PoseHistory.js` | host pose rewind buffer |
-| `src/net/RemoteAvatars.js` | remote interp buffer |
-| `src/net/NetPawn.js` | `ackSeq` / `lastInputAt` in snaps |
-| `src/net/NetTypes.js` | Phase 4 constants |
-
-### A.5 Tests
+### A.4 Tests / run
 
 ```bash
+npm run dev
 npm run test:mp-sync
-npm run test:lan-room
-npm run test:rtc-signal
-npm run test:modes
 npm run build
 ```
 
-### A.6 Gotchas
+### A.5 Volgende stappen
 
-1. Combat sync vereist **open WebRTC** (lobby “P2P ready”).  
-2. Lag-comp gebruikt tijd sinds laatste input van de shooter als rewind-proxy (geen aparte ping).  
-3. Phase 4b (reconnect) nog niet.  
-4. Hub poort **8787**; online = host IP invullen.
+1. Online DM playtesten op live URL (hard refresh na deploy)  
+2. **Phase 3** — echte TDM/CTF/BR gameplay  
+3. **Phase 4b** — reconnect als nodig  
 
-### A.7 Volgende stappen
-
-1. Playtest online DM (Fase 4a feel)  
-2. Phase 3: echte CTF / BR / TDM HUD  
-3. Phase 4b: reconnect indien nodig  
+Details, gotchas, architectuur: **[`CONTINUITY.md`](CONTINUITY.md)**.  
+Fasen-checklist: **[`ROADMAP.md`](ROADMAP.md)**.  
+Deploy: **[`DEPLOY.md`](DEPLOY.md)**.
 
 **Einde handoff.**
