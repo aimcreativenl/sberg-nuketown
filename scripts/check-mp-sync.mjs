@@ -1,10 +1,18 @@
 /**
- * Phase 2a multiplayer combat sync — pure unit tests (no WebRTC / DOM).
+ * Phase 2a multiplayer combat sync + Phase 4 net polish — pure unit tests (no WebRTC / DOM).
  */
 import * as THREE from 'three';
-import { NET_MSG, SNAPSHOT_HZ, INPUT_HZ } from '../src/net/NetTypes.js';
+import {
+  NET_MSG,
+  SNAPSHOT_HZ,
+  INPUT_HZ,
+  LAG_COMP_MAX_MS,
+  RECONCILE_EPS_XZ,
+} from '../src/net/NetTypes.js';
 import { sampleInputFrame, emptyInputFrame } from '../src/net/sampleInput.js';
 import { NetPawn } from '../src/net/NetPawn.js';
+import { InputHistory, residualError } from '../src/net/InputHistory.js';
+import { PoseHistory, clampRewindMs } from '../src/net/PoseHistory.js';
 import { PLAYER_HEIGHT } from '../src/game/constants.js';
 
 const failures = [];
@@ -140,6 +148,35 @@ assert(INPUT_HZ === 30, `INPUT_HZ === 30 (got ${INPUT_HZ})`);
   assert(s.hp === 100 && s.alive === true, 'toSnap hp/alive');
   assert(s.kills === 2 && s.deaths === 1, 'toSnap k/d');
   assert(s.weapon === 1 && s.aiming === true, 'toSnap weapon/aiming');
+  assert(typeof s.ackSeq === 'number', 'toSnap.ackSeq');
+  assert(typeof s.outfitIndex === 'number', 'toSnap.outfitIndex');
+}
+
+// ─── Phase 4: InputHistory reconciliation helpers ─────────────────────
+{
+  const hist = new InputHistory(8);
+  hist.push(1, { x: 0, y: 1.6, z: 0 });
+  hist.push(2, { x: 1, y: 1.6, z: 0 });
+  hist.push(3, { x: 2, y: 1.6, z: 0 });
+  assert(hist.findAtOrBefore(2)?.x === 1, 'InputHistory.findAtOrBefore(2)');
+  assert(hist.findAtOrBefore(9)?.seq === 3, 'InputHistory.findAtOrBefore past end');
+  const err = residualError({ x: 2.5, y: 1.6, z: 0 }, hist.findAtOrBefore(3));
+  assert(Math.abs(err.dx - 0.5) < 1e-6 && err.dxz > 0.4, 'residualError dx');
+  hist.dropThrough(2);
+  assert(hist.size === 1 && hist.findAtOrBefore(3)?.seq === 3, 'dropThrough keeps seq 3');
+}
+
+// ─── Phase 4: PoseHistory lag-comp sample ─────────────────────────────
+{
+  assert(LAG_COMP_MAX_MS === 150, 'LAG_COMP_MAX_MS');
+  assert(RECONCILE_EPS_XZ > 0, 'RECONCILE_EPS_XZ');
+  assert(clampRewindMs(500) === LAG_COMP_MAX_MS, 'clampRewindMs caps');
+  assert(clampRewindMs(40) === 40, 'clampRewindMs passthrough');
+  const ph = new PoseHistory(10);
+  ph.push({ t: 1000, x: 0, y: 1.6, z: 0, yaw: 0, pitch: 0 });
+  ph.push({ t: 1100, x: 10, y: 1.6, z: 0, yaw: 0, pitch: 0 });
+  const mid = ph.sampleAt(1050);
+  assert(mid && Math.abs(mid.x - 5) < 1e-6, `PoseHistory.sampleAt mid x≈5 got ${mid?.x}`);
 }
 
 // ─── Report ────────────────────────────────────────────────────────────
@@ -155,4 +192,6 @@ console.log(`check-mp-sync OK (${[
   'NetPawn.setInput',
   'NetPawn.stepMovement',
   'toSnap',
+  'InputHistory',
+  'PoseHistory',
 ].join(', ')})`);

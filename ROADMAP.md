@@ -118,7 +118,7 @@ for v1. Host machine is authoritative (“server owns truth”).
 - [x] Keep single-player bot match as PLAY (unchanged).
 - [x] Tests: `npm run test:mp-sync`.
 
-**Next session:** Phase 3 (real TDM/CTF/BR gameplay) or Phase 4 polish (prediction feel).
+**Next session:** Phase 4 MVP done — Phase 3 (real TDM/CTF/BR gameplay) next, or Phase 4b (reconnect).
 
 ### 2b. Online join (NAT) — DONE (2026-08-06)
 - [x] WebRTC datachannel to host (`RtcLink` / `OnlineSession`); STUN via public Google servers.
@@ -154,7 +154,7 @@ for v1. Host machine is authoritative (“server owns truth”).
 
 **Goal:** the game modes friends actually want, with lobby mode-select and solid rules.
 
-- [ ] Lobby: host picks mode (Deathmatch / TDM / CTF / Battle Royale).
+- [x] Lobby: host picks mode (Deathmatch / TDM / CTF / Battle Royale). *(scaffolding in 2c)*
 - [ ] **Team Deathmatch** — teams, team score, team spawns / friendly-fire policy.
 - [ ] **Capture the Flag** — flags, capture/return, score win.
 - [ ] **Battle Royale (PUBG-style)** — shrinking zone, loot/loadout rules TBD, **no late join**.
@@ -169,14 +169,22 @@ for v1. Host machine is authoritative (“server owns truth”).
 
 **Goal:** multiplayer that feels fair and survives bad Wi‑Fi / host issues.
 
-- [ ] Client-side prediction + reconciliation (smooth remote movement).
-- [ ] Lag compensation basics for hitscan (host-authoritative).
-- [ ] Host disconnect: clear “host left” end; optional **host migration** later.
+### 4a. MVP — DONE (2026-08-06)
+- [x] Client-side prediction + **ackSeq reconciliation** (`InputHistory` + residual correct in `MpMatch`).
+- [x] Remote avatar **snapshot buffer** + delayed interpolation (`RemoteAvatars.tick`).
+- [x] Lag compensation basics for hitscan (`PoseHistory` rewind ≤ `LAG_COMP_MAX_MS`).
+- [x] Soft-correct tuned around reconcile path (eps / soft / snap thresholds).
+- [x] Host disconnect: clear “host left” end *(from 2c)*.
+- [x] Tests: `npm run test:mp-sync` covers InputHistory + PoseHistory.
+
+### 4b. Later (not in MVP)
 - [ ] Reconnect / rejoin mid-match where mode allows (not BR).
+- [ ] Optional **host migration**.
 - [ ] Voice-optional later — **not** required; keep v1 text/toast only.
 - [ ] Anti-cheat light: ignore impossible client claims (speed/ammo); host remains truth.
+- [ ] TURN relay if many home NATs fail.
 
-**Exit:** playable 4–8 friends on mixed home networks without constant desync rage-quits.
+**Exit (MVP):** playable deathmatch on mixed networks without constant rubber-banding. **Exit (full):** 4–8 friends without desync rage-quits + reconnect.
 
 ---
 

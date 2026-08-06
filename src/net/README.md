@@ -24,6 +24,13 @@ Multiplayer networking (client ↔ authoritative **listen-server** / host).
 - Team modes assign `alpha` / `bravo` in room state.
 - Host leave → `host_left` → match ends (`HOST_DISCONNECT_POLICY = 'end_match'`).
 
+## Phase 4a — Net polish MVP
+
+- Guest **reconciliation:** `InputHistory` + per-player `ackSeq` on snapshots; correct residual vs predicted pose.
+- **Remote interpolation:** `RemoteAvatars` keeps a short snap buffer and renders at `now − REMOTE_INTERP_DELAY_MS`.
+- **Lag compensation:** host `PoseHistory` per pawn; hitscan rewinds victims up to `LAG_COMP_MAX_MS` based on attacker input age.
+- Still deferred (4b): mid-match reconnect, host migration, TURN, voice.
+
 ## How to run
 
 - `npm run dev` — game **and** hub on **8787** (`/mp`)
@@ -39,8 +46,9 @@ Multiplayer networking (client ↔ authoritative **listen-server** / host).
 | `rtcConfig.js` | STUN + signal URL helpers |
 | `RtcLink.js` | WebRTC DataChannel peer |
 | `OnlineSession.js` | lobby + RTC orchestration (used by `Game.js`) |
-| `MpMatch.js` / `NetPawn.js` / `RemoteAvatars.js` | Phase 2a host combat sync |
-| `NetTypes.js` | `InputFrame` / snapshot / event wire types |
+| `MpMatch.js` / `NetPawn.js` / `RemoteAvatars.js` | combat sync + Phase 4a polish |
+| `InputHistory.js` / `PoseHistory.js` | reconciliation + lag-comp buffers |
+| `NetTypes.js` | wire types + Phase 4 constants |
 | `server/lanRoom.js` | Node hub + signal relay |
 
-**Done for Phase 2a–2c scaffolding.** Phase 3 = real TDM/CTF/BR content; Phase 4 = net polish.
+**Phase 2a–2c + 4a done.** Next: Phase 3 mode content, or Phase 4b reconnect.

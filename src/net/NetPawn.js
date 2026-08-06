@@ -56,6 +56,8 @@ export class NetPawn {
     /** @type {import('../physics/PhysicsManager.js').PhysicsManager|null} */
     this.physics = null;
     this._rapier = null;
+    /** Host: last time an input frame was accepted (ms). */
+    this.lastInputAt = 0;
   }
 
   /**
@@ -83,6 +85,8 @@ export class NetPawn {
     if (input.seq > this.lastSeq) {
       this.lastSeq = input.seq;
       this.lastInput = input;
+      this.lastInputAt =
+        typeof performance !== 'undefined' ? performance.now() : Date.now();
     }
   }
 
@@ -383,6 +387,7 @@ export class NetPawn {
       weapon: this.weaponSlot,
       aiming: this.aiming,
       outfitIndex: this.outfitIndex | 0,
+      ackSeq: this.lastSeq | 0,
     };
   }
 }

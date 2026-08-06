@@ -18,6 +18,17 @@ export const SNAPSHOT_HZ = 20;
 /** Guest / local input sample send rate (Hz). */
 export const INPUT_HZ = 30;
 
+/** Phase 4: how far back hitscan may rewind victim poses (ms). */
+export const LAG_COMP_MAX_MS = 150;
+/** Phase 4: remote avatar render delay behind latest snap (ms). */
+export const REMOTE_INTERP_DELAY_MS = 100;
+/** Phase 4: ignore tiny residuals after ack (metres, XZ). */
+export const RECONCILE_EPS_XZ = 0.08;
+/** Phase 4: hard snap if residual exceeds this (metres, XZ). */
+export const RECONCILE_SNAP_XZ = 4.5;
+/** Phase 4: soft blend start (metres, XZ). */
+export const RECONCILE_SOFT_XZ = 0.35;
+
 /**
  * A single client input sample, sent to the authoritative host.
  * @typedef {Object} InputFrame
@@ -56,6 +67,8 @@ export const INPUT_HZ = 30;
  * @property {number} deaths
  * @property {number} weapon
  * @property {boolean} aiming
+ * @property {number} [outfitIndex]
+ * @property {number} [ackSeq] - Last input seq processed for this player (guest reconciliation).
  */
 
 /**
@@ -65,6 +78,7 @@ export const INPUT_HZ = 30;
  * @property {number} tick
  * @property {PlayerSnap[]} players
  * @property {Array<{ id: string, open: boolean }>} [doors]
+ * @property {number} [serverTime] - Host performance.now() when snap built (lag-comp / interp).
  */
 
 /**

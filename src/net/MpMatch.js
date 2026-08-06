@@ -1,9 +1,19 @@
 import * as THREE from 'three';
 import { KILL_LIMIT, PLAYER_HEIGHT } from '../game/constants.js';
-import { NET_MSG, SNAPSHOT_HZ, INPUT_HZ } from './NetTypes.js';
+import {
+  NET_MSG,
+  SNAPSHOT_HZ,
+  INPUT_HZ,
+  LAG_COMP_MAX_MS,
+  RECONCILE_EPS_XZ,
+  RECONCILE_SNAP_XZ,
+  RECONCILE_SOFT_XZ,
+} from './NetTypes.js';
 import { sampleInputFrame } from './sampleInput.js';
 import { NetPawn } from './NetPawn.js';
 import { RemoteAvatars } from './RemoteAvatars.js';
+import { InputHistory, residualError } from './InputHistory.js';
+import { PoseHistory, clampRewindMs } from './PoseHistory.js';
 
 const FIRE_INTERVAL = 0.15;
 const DMG_BODY = 28;
@@ -11,7 +21,9 @@ const DMG_HEAD = 42;
 const SHOT_RANGE = 80;
 const HEAD_RADIUS = 0.24;
 const CHEST_RADIUS = 0.32;
-const CORRECT_DIST = 3.25;
+/** Fallback hard correct if reconcile history missing (metres XZ). */
+const CORRECT_DIST = 4.0;
+const POSE_HISTORY_CAP = 48;
 
 /**
  * Orchestrates one network match (host-authoritative combat sync).
@@ -71,6 +83,10 @@ export class MpMatch {
     this._matchEnded = false;
     /** Rising-edge tracker for InputFrame.interact per pawn id. */
     this._prevInteract = new Map();
+    /** Guest: predicted poses keyed by input seq. */
+    this._inputHistory = new InputHistory(64);
+    /** Host: pose ring buffer per pawn id for lag-comp. */
+    this._poseHistory = new Map();
   }
 
   /** @param {THREE.Scene} scene */
@@ -93,6 +109,8 @@ export class MpMatch {
     this._pendingEvents = [];
     this._pendingSnap = null;
     this._prevInteract.clear();
+    this._inputHistory.clear();
+    this._poseHistory.clear();
 
     const spawns = (spawnPoints || this.mapData?.spawnPoints || []).map((s, i) => {
       if (s?.clone) return s.clone();
@@ -173,6 +191,8 @@ export class MpMatch {
     this.pawns.clear();
     this._pendingSnap = null;
     this._pendingEvents = [];
+    this._inputHistory.clear();
+    this._poseHistory.clear();
   }
 
   // ─── Host ───────────────────────────────────────────────────────────
@@ -262,10 +282,17 @@ export class MpMatch {
       pawn.stepMovement(dt, world);
     }
 
+    // Record poses for lag-compensated hitscan (after movement)
+    const nowPose =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    for (const pawn of this.pawns.values()) {
+      this._recordPose(pawn, nowPose);
+    }
+
     // 4. Combat
     this._hostCombat(dt, ctx);
 
-    // 5. Snapshots (include door states for late-join / desync recovery)
+    // 5. Snapshots (include door states + ackSeq via toSnap for guest reconcile)
     this.tick += 1;
     this._snapAcc += dt;
     const snapInterval = 1 / SNAPSHOT_HZ;
@@ -275,6 +302,7 @@ export class MpMatch {
       const snap = {
         t: NET_MSG.snapshot,
         tick: this.tick,
+        serverTime: nowPose,
         players: [...this.pawns.values()].map((p) => p.toSnap()),
         doors: doors?.toNetState?.() || undefined,
       };
@@ -293,7 +321,8 @@ export class MpMatch {
       const remotes = [...this.pawns.values()]
         .filter((p) => p.id !== this.localId)
         .map((p) => p.toSnap());
-      this.avatars.applySnapshot(remotes, this.localId, dt);
+      this.avatars.applySnapshot(remotes, this.localId, dt, nowPose);
+      this.avatars.tick(dt, this.localId);
     }
 
     // Mirror auth combat stats onto local Player (position stays with player.update)
@@ -369,19 +398,37 @@ export class MpMatch {
     let best = null;
     let bestDist = SHOT_RANGE;
 
+    const now =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    // Estimate attacker latency from time since their last accepted input
+    let rewindMs = 0;
+    if (attacker.id !== this.localId && attacker.lastInputAt > 0) {
+      rewindMs = clampRewindMs(now - attacker.lastInputAt, {
+        maxMs: LAG_COMP_MAX_MS,
+      });
+    } else if (attacker.id !== this.localId) {
+      rewindMs = clampRewindMs(80, { maxMs: LAG_COMP_MAX_MS });
+    }
+    const rewindAt = now - rewindMs;
+
     for (const other of this.pawns.values()) {
       if (other.id === attacker.id || !other.alive) continue;
       // Team modes: no friendly fire when both have a team
       if (attacker.team && other.team && attacker.team === other.team) continue;
 
-      // Prefer avatar hit volumes when available
+      const rewound = this._poseAt(other.id, rewindAt);
+      const eye = rewound
+        ? new THREE.Vector3(rewound.x, rewound.y, rewound.z)
+        : other.position.clone();
+
+      // Prefer avatar hit volumes when available, offset by rewind delta
       const avatarEntry = this.avatars?.byId?.get(other.id);
       const volumes =
         typeof avatarEntry?.character?.getHitVolumes === 'function'
           ? avatarEntry.character.getHitVolumes()
           : null;
 
-      if (volumes?.length) {
+      if (volumes?.length && !rewound) {
         for (const vol of volumes) {
           const hit =
             vol.kind === 'capsule'
@@ -395,9 +442,9 @@ export class MpMatch {
         continue;
       }
 
-      // Fallback: head at eye + chest sphere
-      const head = other.position.clone();
-      const chest = other.position.clone();
+      // Lag-comp / fallback: head at eye + chest sphere at rewound pose
+      const head = eye.clone();
+      const chest = eye.clone();
       chest.y -= 0.45;
 
       for (const [center, radius, headshot] of [
@@ -413,6 +460,29 @@ export class MpMatch {
     }
 
     return best;
+  }
+
+  /** @param {NetPawn} pawn @param {number} t */
+  _recordPose(pawn, t) {
+    if (!pawn?.id) return;
+    let hist = this._poseHistory.get(pawn.id);
+    if (!hist) {
+      hist = new PoseHistory(POSE_HISTORY_CAP);
+      this._poseHistory.set(pawn.id, hist);
+    }
+    hist.push({
+      t,
+      x: pawn.position.x,
+      y: pawn.position.y,
+      z: pawn.position.z,
+      yaw: pawn.yaw,
+      pitch: pawn.pitch,
+    });
+  }
+
+  /** @param {string} id @param {number} when */
+  _poseAt(id, when) {
+    return this._poseHistory.get(id)?.sampleAt(when) || null;
   }
 
   /** @param {import('./NetTypes.js').EventMsg} ev */
@@ -485,6 +555,8 @@ export class MpMatch {
       }
       frame.id = this.localId;
       this.session?.sendGame?.(frame);
+      // Predicted pose at this seq — used when host acks for reconciliation
+      this._inputHistory.push(this._inputSeq, player.position);
     }
 
     // 2. Local player.update stays in Game (prediction)
@@ -493,6 +565,9 @@ export class MpMatch {
     if (this._pendingSnap) {
       this._applySnapshot(this._pendingSnap, dt, ctx);
       this._pendingSnap = null;
+    } else if (this.avatars) {
+      // Keep remotes interpolating between snaps
+      this.avatars.tick(dt, this.localId);
     }
   }
 
@@ -547,40 +622,79 @@ export class MpMatch {
 
       // Skip harsh pose correction right after a tab wake — it feels like a full reset.
       if (!ctx.wakeGrace && localSnap.alive && player.alive) {
-        const auth = new THREE.Vector3(localSnap.x, localSnap.y, localSnap.z);
-        // Prefer horizontal correction — vertical door/floor fights felt like sticky walls
-        const dxz = Math.hypot(player.position.x - auth.x, player.position.z - auth.z);
-        const dy = Math.abs(player.position.y - auth.y);
-        if (dxz > CORRECT_DIST || dy > CORRECT_DIST + 1.5) {
-          const keys = player.keys;
-          const moving =
-            keys?.has?.('KeyW') ||
-            keys?.has?.('KeyA') ||
-            keys?.has?.('KeyS') ||
-            keys?.has?.('KeyD');
-          const t = moving
-            ? Math.min(0.12, dt * 1.6)
-            : dxz > 8 || dy > 8
-              ? 0.28
-              : Math.min(0.4, dt * 5);
-          player.position.x = THREE.MathUtils.lerp(player.position.x, auth.x, t);
-          player.position.z = THREE.MathUtils.lerp(player.position.z, auth.z, t);
-          if (dy > 1.25) {
-            player.position.y = THREE.MathUtils.lerp(player.position.y, auth.y, t);
-          }
-          if (player._rapier && player.physics) {
-            player.physics.teleport?.(
-              player._rapier,
-              player.position.x,
-              player.position.y,
-              player.position.z
-            );
-          }
-        }
+        this._reconcileLocal(player, localSnap, dt);
       }
     }
 
-    this.avatars?.applySnapshot(players, this.localId, dt);
+    this.avatars?.applySnapshot(players, this.localId, dt, msg.serverTime || 0);
+    this.avatars?.tick(dt, this.localId);
+  }
+
+  /**
+   * Phase 4: correct residual error vs predicted pose at ackSeq (not raw distance yank).
+   * @param {import('../game/Player.js').Player} player
+   * @param {import('./NetTypes.js').PlayerSnap} localSnap
+   * @param {number} dt
+   */
+  _reconcileLocal(player, localSnap, dt) {
+    const auth = { x: localSnap.x, y: localSnap.y, z: localSnap.z };
+    const ackSeq = localSnap.ackSeq | 0;
+    const predicted = ackSeq > 0 ? this._inputHistory.findAtOrBefore(ackSeq) : null;
+
+    let dx;
+    let dy;
+    let dz;
+    let dxz;
+
+    if (predicted) {
+      const err = residualError(auth, predicted);
+      dx = err.dx;
+      dy = err.dy;
+      dz = err.dz;
+      dxz = err.dxz;
+      this._inputHistory.dropThrough(ackSeq);
+    } else {
+      // No history yet — fall back to absolute distance soft-correct
+      dx = auth.x - player.position.x;
+      dy = auth.y - player.position.y;
+      dz = auth.z - player.position.z;
+      dxz = Math.hypot(dx, dz);
+      if (dxz < CORRECT_DIST && Math.abs(dy) < CORRECT_DIST + 1.5) return;
+    }
+
+    if (dxz < RECONCILE_EPS_XZ && Math.abs(dy) < 0.35) return;
+
+    const keys = player.keys;
+    const moving =
+      keys?.has?.('KeyW') ||
+      keys?.has?.('KeyA') ||
+      keys?.has?.('KeyS') ||
+      keys?.has?.('KeyD');
+
+    let blend;
+    if (dxz >= RECONCILE_SNAP_XZ || Math.abs(dy) > 6) {
+      blend = moving ? 0.55 : 0.85;
+    } else if (dxz >= RECONCILE_SOFT_XZ) {
+      blend = moving ? Math.min(0.22, dt * 3) : Math.min(0.4, dt * 5);
+    } else {
+      // Tiny residual — gentle nudge
+      blend = Math.min(0.12, dt * 2);
+    }
+
+    player.position.x += dx * blend;
+    player.position.z += dz * blend;
+    if (Math.abs(dy) > 0.45) {
+      player.position.y += dy * blend;
+    }
+
+    if (player._rapier && player.physics) {
+      player.physics.teleport?.(
+        player._rapier,
+        player.position.x,
+        player.position.y,
+        player.position.z
+      );
+    }
   }
 }
 /**
