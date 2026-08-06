@@ -1,0 +1,19 @@
+# Render Blueprint — signal / lobby hub for S'Berg Nuketown
+# https://render.com/docs/blueprint-spec
+#
+# After first deploy, copy the service URL into Vercel env:
+#   VITE_SBARG_SIGNAL_URL=wss://YOUR-SERVICE.onrender.com/mp
+# Then redeploy Vercel so the client build picks it up.
+
+services:
+  - type: web
+    name: sbarg-nuketown-hub
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

@@ -1,0 +1,75 @@
+{
+  "windowPos": {
+    "x": -19.7,
+    "y": 4.425,
+    "z": -5
+  },
+  "glass": {
+    "type": "MeshPhysicalMaterial",
+    "transmission": 0.92,
+    "opacity": 1,
+    "depthWrite": false
+  },
+  "windowSamples": {
+    "center": [
+      66,
+      94,
+      95,
+      255
+    ],
+    "lower": [
+      127,
+      91,
+      34,
+      255
+    ]
+  },
+  "sillSamples": {
+    "center": [
+      88,
+      79,
+      18,
+      255
+    ],
+    "lower": [
+      100,
+      39,
+      15,
+      255
+    ]
+  },
+  "gapSamples": {
+    "center": [
+      52,
+      23,
+      3,
+      255
+    ],
+    "lower": [
+      89,
+      90,
+      78,
+      255
+    ]
+  },
+  "livingSamples": {
+    "center": [
+      6,
+      4,
+      8,
+      255
+    ],
+    "lower": [
+      162,
+      103,
+      112,
+      255
+    ]
+  },
+  "shots": {
+    "winPath": "C:\\Users\\Gebruiker\\Desktop\\AI projecten\\Sbarg Nuketown\\scripts\\_l2-verify\\l2-through-window.png",
+    "sillPath": "C:\\Users\\Gebruiker\\Desktop\\AI projecten\\Sbarg Nuketown\\scripts\\_l2-verify\\l2-sill-joint.png",
+    "gapPath": "C:\\Users\\Gebruiker\\Desktop\\AI projecten\\Sbarg Nuketown\\scripts\\_l2-verify\\l1-l2-joint.png",
+    "livingPath": "C:\\Users\\Gebruiker\\Desktop\\AI projecten\\Sbarg Nuketown\\scripts\\_l2-verify\\interior-living.png"
+  }
+}
