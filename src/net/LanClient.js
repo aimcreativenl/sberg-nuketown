@@ -42,9 +42,31 @@ export class LanClient {
   connect() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return Promise.resolve();
     if (this._openPromise) return this._openPromise;
+
+    const url = this.url;
+    const remote =
+      /^wss:/i.test(url) ||
+      /onrender\.com/i.test(url) ||
+      (typeof window !== 'undefined' && !!window.__SBARG_SIGNAL_URL__);
+    // Render free cold-start can take 30–60s; LAN should fail fast.
+    const timeoutMs = remote ? 55000 : 4000;
+
     this._openPromise = new Promise((resolve, reject) => {
       let settled = false;
-      const ws = new WebSocket(this.url);
+      let ws;
+      try {
+        ws = new WebSocket(url);
+      } catch (err) {
+        this._openPromise = null;
+        reject(
+          new Error(
+            remote
+              ? `Signal hub URL invalid (${url}). Check VITE_SBARG_SIGNAL_URL.`
+              : `Cannot open WebSocket (${url}).`
+          )
+        );
+        return;
+      }
       this.ws = ws;
       const timer = setTimeout(() => {
         if (settled) return;
@@ -53,8 +75,14 @@ export class LanClient {
           ws.close();
         } catch (_) {}
         this._openPromise = null;
-        reject(new Error('LAN host not reachable — is `npm run dev` or `npm run lan-host` running?'));
-      }, 4000);
+        reject(
+          new Error(
+            remote
+              ? 'Online hub not reachable (cold start?). Open https://sbarg-nuketown-hub.onrender.com/health, wait for ok, then try Host again.'
+              : 'LAN host not reachable — is `npm run dev` or `npm run lan-host` running?'
+          )
+        );
+      }, timeoutMs);
 
       ws.onopen = () => {
         /* wait for welcome */
@@ -119,7 +147,13 @@ export class LanClient {
         if (!settled) {
           settled = true;
           clearTimeout(timer);
-          reject(new Error('Disconnected from LAN host'));
+          reject(
+            new Error(
+              remote
+                ? `Disconnected from online hub (${url}). Wake the Render service and retry.`
+                : 'Disconnected from LAN host'
+            )
+          );
         }
         this.onClose();
       };

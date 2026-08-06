@@ -755,14 +755,14 @@ export class Game {
       modeId,
       players: [{ id: 'local', name: 'Host', isHost: true }],
       isHost: true,
-      status: 'Connecting to LAN host…',
+      status: 'Connecting to online hub (may take ~30s if waking)…',
     });
     try {
       this._resetMpSession();
       const mp = this._ensureMpSession();
       await mp.host({ name: this._mpNickname, modeId });
       this.ui.updateLobby({
-        status: 'Share the code — friends online: fill your IP on Join. Press Start when ready',
+        status: 'Share the invite code — friends join on the same website',
         isHost: true,
         modeId,
       });
