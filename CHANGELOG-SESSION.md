@@ -1,12 +1,23 @@
 # Pastel Nuketown / Sbarg Nuketown — Sessie-notities & wijzigingen
 
-**Project (actueel):** `c:\Users\Gebruiker\Desktop\AI projecten\Sbarg Nuketown`  
+**Project (actueel):** `C:\Users\Gebruiker\Documents\Sbarg Nuketown`
 **Stack:** Three.js r185 + Vite (vanilla JS modules) + Rapier + ws  
-**Play:** `npm run dev` → **http://127.0.0.1:5173/** · Live: https://sberg-nuketown.vercel.app/  
+**Play:** `npm run dev` → **http://127.0.0.1:5175/** · Progress: http://127.0.0.1:8766/ · Live: https://sberg-nuketown.vercel.app/
 **Laatst bijgewerkt:** 2026-08-09
 
 > **Voor AI-agents:** lees eerst **`CONTINUITY.md`** (dan `HANDOFF.md` / `ROADMAP.md`).  
 > Dit CHANGELOG is chronologisch; oudere secties kunnen verouderd zijn.
+
+---
+
+## 2026-08-09 — Spawn escape fix (`86e1cac`)
+
+- Root cause: the earlier `bf67e26` fix rejected direct collider overlap, but did not reject spawn points that were technically clear yet surrounded by props/fences. The central candidate had only 4 of 16 clear movement exits.
+- `Game._playerSpawn()` now selects ground-level points, validates 16 real player movement paths over 2.2m, requires at least 6 open directions, prefers at least 4m horizontal distance from living bots, and evaluates all candidates.
+- Stale authored points get a grid rescue search. If the whole map is blocked, the code throws an explicit error instead of returning another trapped spawn.
+- `scripts/check-player-spawns.mjs` covers randomized selection, overlap, escape clearance, bot separation and the fully blocked-map failure branch.
+- Independent reviewer: PASS after one fallback correction; no remaining blocker.
+- Browser proof on `http://127.0.0.1:5175/`: open-road spawn, WASD movement visible, console errors: 0. Captures: `ref/polish/spawn-fixed-before-wasd.png`, `ref/polish/spawn-fixed-after-wasd.png`.
 
 ---
 
@@ -234,7 +245,7 @@ Bot-constants staan in `BotAI.js` (snelheid, hunters, ranges).
 ```bash
 cd "c:\Users\Gebruiker\Documents\Pastel Town 3"
 npm install
-npm run dev      # http://127.0.0.1:5173/
+npm run dev      # http://127.0.0.1:5175/
 npm run build
 ```
 

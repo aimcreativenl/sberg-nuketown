@@ -4,13 +4,16 @@
 
 | | |
 |--|--|
-| **Laatst bijgewerkt** | 2026-08-06 |
-| **HEAD (typisch)** | `56be586` — Phase 4a net polish (check `git log -1`) |
-| **Branch** | `main` → `origin/main` |
+| **Laatst bijgewerkt** | 2026-08-09 |
+| **Current checkpoint** | `86e1cac` on branch `codex/fix-player-spawn` |
+| **Local game** | http://127.0.0.1:5175/ |
+| **Progress dashboard** | http://127.0.0.1:8766/ |
+| **HEAD (typisch)** | `86e1cac` — player spawn escape fix (check `git log -1`) |
+| **Branch** | `codex/fix-player-spawn` |
 | **Repo** | https://github.com/aimcreativenl/sberg-nuketown |
 | **Game (live)** | https://sberg-nuketown.vercel.app/ |
 | **Signal hub** | https://sbarg-nuketown-hub.onrender.com (`/health`, `/mp`) |
-| **Workspace** | `c:\Users\Gebruiker\Desktop\AI projecten\Sbarg Nuketown` |
+| **Workspace** | `C:\Users\Gebruiker\Documents\Sbarg Nuketown` |
 
 ---
 
@@ -46,14 +49,22 @@ Pastel voxel FPS (Nuketown-achtig): **offline PLAY vs 9 bots**, of **online list
 | 4b Reconnect / host migration / anti-cheat | OPEN | Bewust niet in 4a |
 | **3 Modes content** | **OPEN** | Volgende grote feature-track |
 | 5 Maps / 6 Ship | OPEN | |
+| **Spawn safety / WASD start** | **DONE** | `86e1cac`; ground-level, escapable, bot-separated spawn selection |
 
 **Aanbevolen next:** online DM playtesten → daarna **Phase 3** (TDM/CTF/BR speelbaar) óf **Phase 4b** (reconnect) als disconnects pijn doen.
 
 ---
 
-## 3. Sessie-log — wat recent is gedaan (2026-08-06)
+## 3. Sessie-log — wat recent is gedaan (2026-08-09; historical entries retained)
 
 Gebruik dit als “wat al gefixt is, niet opnieuw onderzoeken”.
+
+### 3.0 Spawn on blocks / no WASD escape (2026-08-09)
+- Root cause: direct overlap filtering was insufficient; several free authored points were surrounded by colliders, and one placed the player beside a bot.
+- Fix in `src/game/Game.js`: ground-level candidates only; 16 movement-path checks over 2.2m; minimum 6 open directions; preferred 4m horizontal gap from living bots; exhaustive scoring instead of eight random samples.
+- Stale-map fallback searches a ground grid; a fully blocked map raises an explicit error. Regression coverage lives in `scripts/check-player-spawns.mjs`.
+- Verification: spawn test, colliders, Rapier player/bots, movement, MP sync and build green; browser `:5175` fresh PLAY + ten W bursts moved freely; console errors 0; independent reviewer PASS.
+- Checkpoint: `86e1cac`. Dashboard captures: `ref/polish/spawn-fixed-before-wasd.png`, `ref/polish/spawn-fixed-after-wasd.png`.
 
 ### 3.1 UI — Host/Search niet klikbaar
 - **Probleem:** PLAY scale-animatie vergroot hitbox over Host/Search; links hadden `padding: 0`.
@@ -148,6 +159,8 @@ Live deploy: push naar `main` → Vercel + Render volgen de repo.
 ---
 
 ## 8. Volgende sessie — concrete startprompts
+
+Spawn/WASD-start is opgelost in `86e1cac`; gebruik voor playtests de lokale link `http://127.0.0.1:5175/` en voor voortgang `http://127.0.0.1:8766/`. Een volgende technische check kan optioneel directe BotManager/Rapier-locomotion coverage toevoegen; daarna zijn Phase 3/4b de geplande tracks.
 
 **Playtest / bugs:** “Online DM voelt nog X — fix in MpMatch/RemoteAvatars.”
 
