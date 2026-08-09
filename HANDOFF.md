@@ -6,7 +6,7 @@
 **Laatst bijgewerkt:** 2026-08-09 (spawn escape fix)
 **Lokale game:** http://127.0.0.1:5175/
 **Progress dashboard:** http://127.0.0.1:8766/
-**Workspace checkpoint:** branch `codex/fix-player-spawn`, HEAD `86e1cac`
+**Workspace checkpoint:** branch `codex/fix-player-spawn`, HEAD `6c05a01` (functional fix `86e1cac`)
 **Live:** https://sberg-nuketown.vercel.app/ · hub https://sbarg-nuketown-hub.onrender.com  
 **Repo:** https://github.com/aimcreativenl/sberg-nuketown · branch `main`
 
