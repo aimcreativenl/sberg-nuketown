@@ -29,3 +29,6 @@ dist-ssr
 
 # Local Codex worktrees
 .worktrees/
+
+# Superpowers task briefs, reports and review artifacts
+.superpowers/sdd/
