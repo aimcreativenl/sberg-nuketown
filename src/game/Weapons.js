@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { roundedBoxGeo } from './softGeo.js';
 
 /** Player loadout (hotkeys 1 / 2) — Phase A light TTK (snappier than sponge) */
 export const LOADOUT = [
@@ -112,7 +113,7 @@ export const WEAPONS = [
 
 /** Shared FP gun materials — plastic vs metal contrast (Option A Phase 4). */
 const _vmMatCache = new Map();
-const _vmGeoCache = new Map();
+const _vmCylinderGeoCache = new Map();
 
 function vmMat(color, kind = 'plastic') {
   const key = `${kind}_${(color >>> 0).toString(16)}`;
@@ -132,7 +133,7 @@ function vmMat(color, kind = 'plastic') {
     color,
     roughness: p.roughness,
     metalness: p.metalness,
-    flatShading: true,
+    flatShading: false,
     depthTest: false,
     depthWrite: false,
     toneMapped: false,
@@ -144,18 +145,34 @@ function vmMat(color, kind = 'plastic') {
 }
 
 function vmGeo(w, h, d) {
-  const key = `${w.toFixed(4)}_${h.toFixed(4)}_${d.toFixed(4)}`;
-  let g = _vmGeoCache.get(key);
-  if (!g) {
-    g = new THREE.BoxGeometry(w, h, d);
-    g.userData.shared = true;
-    _vmGeoCache.set(key, g);
+  const radius = Math.min(w, h, d) * 0.22;
+  const geo = roundedBoxGeo(w, h, d, radius, 3);
+  geo.userData.shared = true;
+  return geo;
+}
+
+function vmCylinderGeo(radius, length) {
+  const key = `${radius.toFixed(4)}_${length.toFixed(4)}`;
+  let geo = _vmCylinderGeoCache.get(key);
+  if (!geo) {
+    geo = new THREE.CylinderGeometry(radius, radius, length, 8, 1, false);
+    geo.rotateX(Math.PI / 2);
+    geo.userData.shared = true;
+    _vmCylinderGeoCache.set(key, geo);
   }
-  return g;
+  return geo;
 }
 
 function box(w, h, d, color, x = 0, y = 0, z = 0, kind = 'plastic') {
   const m = new THREE.Mesh(vmGeo(w, h, d), vmMat(color, kind));
+  m.position.set(x, y, z);
+  m.frustumCulled = false;
+  m.renderOrder = 9999;
+  return m;
+}
+
+function cylinder(radius, length, color, x = 0, y = 0, z = 0, kind = 'metal') {
+  const m = new THREE.Mesh(vmCylinderGeo(radius, length), vmMat(color, kind));
   m.position.set(x, y, z);
   m.frustumCulled = false;
   m.renderOrder = 9999;
@@ -201,9 +218,9 @@ export function buildViewModel(def) {
     root.add(box(0.01, 0.018, 0.04, darkMetal, -0.026, 0.048, 0.0, 'darkMetal'));
     root.add(box(0.048, 0.01, 0.1, mint, 0.0, 0.056, -0.04, 'accent'));
     // Barrel segments + muzzle
-    root.add(box(0.024, 0.024, 0.055, darkMetal, 0.0, 0.03, -0.145, 'darkMetal'));
-    root.add(box(0.02, 0.02, 0.04, metal, 0.0, 0.03, -0.185, 'metal'));
-    root.add(box(0.03, 0.03, 0.016, cream, 0.0, 0.03, -0.205, 'accent'));
+    root.add(cylinder(0.012, 0.055, darkMetal, 0.0, 0.03, -0.145, 'darkMetal'));
+    root.add(cylinder(0.01, 0.04, metal, 0.0, 0.03, -0.185, 'metal'));
+    root.add(cylinder(0.015, 0.016, cream, 0.0, 0.03, -0.205, 'accent'));
     // Front / rear sights
     root.add(box(0.01, 0.016, 0.01, darkMetal, 0.0, 0.062, -0.145, 'darkMetal'));
     root.add(box(0.018, 0.014, 0.012, darkMetal, 0.0, 0.06, 0.01, 'darkMetal'));
@@ -240,10 +257,10 @@ export function buildViewModel(def) {
     root.add(box(0.01, 0.028, 0.1, rail, 0.026, 0.018, -0.155, 'metal'));
     root.add(box(0.01, 0.028, 0.1, rail, -0.026, 0.018, -0.155, 'metal'));
     // Barrel segments + gas block + muzzle
-    root.add(box(0.02, 0.02, 0.08, black, 0.0, 0.024, -0.24, 'darkMetal'));
-    root.add(box(0.026, 0.026, 0.03, metal, 0.0, 0.024, -0.275, 'metal')); // gas block
-    root.add(box(0.016, 0.016, 0.05, black, 0.0, 0.024, -0.31, 'darkMetal'));
-    root.add(box(0.028, 0.028, 0.028, metal, 0.0, 0.024, -0.34, 'metal')); // muzzle
+    root.add(cylinder(0.01, 0.08, black, 0.0, 0.024, -0.24, 'darkMetal'));
+    root.add(cylinder(0.013, 0.03, metal, 0.0, 0.024, -0.275, 'metal')); // gas block
+    root.add(cylinder(0.008, 0.05, black, 0.0, 0.024, -0.31, 'darkMetal'));
+    root.add(cylinder(0.014, 0.028, metal, 0.0, 0.024, -0.34, 'metal')); // muzzle
     root.add(box(0.032, 0.014, 0.012, cream, 0.0, 0.024, -0.355, 'accent'));
     // Front sight post
     root.add(box(0.012, 0.032, 0.012, black, 0.0, 0.05, -0.285, 'darkMetal'));
