@@ -5,10 +5,10 @@
 | | |
 |--|--|
 | **Laatst bijgewerkt** | 2026-08-09 |
-| **Current checkpoint** | `6c05a01` docs checkpoint; functional spawn fix `86e1cac` |
+| **Current checkpoint** | Current branch tip; functional spawn fix `86e1cac` |
 | **Local game** | http://127.0.0.1:5175/ |
 | **Progress dashboard** | http://127.0.0.1:8766/ |
-| **HEAD (typisch)** | `6c05a01` — spawn verification docs/captures (check `git log -1`) |
+| **HEAD (typisch)** | Current branch tip — spawn verification docs/captures (check `git log -1`) |
 | **Branch** | `codex/fix-player-spawn` |
 | **Repo** | https://github.com/aimcreativenl/sberg-nuketown |
 | **Game (live)** | https://sberg-nuketown.vercel.app/ |
