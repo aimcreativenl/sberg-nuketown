@@ -74,13 +74,23 @@ assert(switchClick.ammoBySlot[1] === m16AmmoBeforeClickSwitch, 'M16 ammo unchang
 
 const switchRelease = new WeaponController(camera, null, null, null);
 switchRelease.update(1 / 60, makeInput({ weaponSlot: 1, shoot: true }), true);
+const heldSwitchToPistolShots = switchRelease.update(1 / 60, makeInput({ weaponSlot: 0, shoot: true }), true);
+assert(heldSwitchToPistolShots.length === 0, 'held trigger stays held on pistol switch');
+const heldAfterSwitchShots = switchRelease.update(1 / 60, makeInput({ shoot: true }), true);
+assert(heldAfterSwitchShots.length === 0, 'held trigger stays held after switching to pistol');
+switchRelease.update(1 / 60, makeInput({ shoot: false }), true);
+const freshPistolShots = switchRelease.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
+assert(freshPistolShots.length === 1, 'fresh pistol click fires exactly one shot after release');
+
+const bufferedSwitch = new WeaponController(camera, null, null, null);
+bufferedSwitch.setLoadoutSlot(1);
 let semiFireCallsOnSwitch = 0;
-const pistolAmmoBeforeSwitch = switchRelease.ammoBySlot[0];
-const switchToPistolShots = switchRelease.update(
+const pistolAmmoBeforeSwitch = bufferedSwitch.ammoBySlot[0];
+const switchToPistolShots = bufferedSwitch.update(
   1 / 60,
   makeInput({
     weaponSlot: 0,
-    shoot: true,
+    shoot: false,
     shootClick: true,
     onSemiFire: () => {
       semiFireCallsOnSwitch++;
@@ -90,12 +100,7 @@ const switchToPistolShots = switchRelease.update(
 );
 assert(switchToPistolShots.length === 0, 'buffered pistol click does not fire on weapon switch');
 assert(semiFireCallsOnSwitch === 0, 'buffered pistol click is not consumed on weapon switch');
-assert(switchRelease.ammoBySlot[0] === pistolAmmoBeforeSwitch, 'pistol ammo unchanged on click switch');
-const heldAfterSwitchShots = switchRelease.update(1 / 60, makeInput({ shoot: true }), true);
-assert(heldAfterSwitchShots.length === 0, 'held trigger stays held after switching to pistol');
-switchRelease.update(1 / 60, makeInput({ shoot: false }), true);
-const freshPistolShots = switchRelease.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
-assert(freshPistolShots.length === 1, 'fresh pistol click fires exactly one shot after release');
+assert(bufferedSwitch.ammoBySlot[0] === pistolAmmoBeforeSwitch, 'pistol ammo unchanged on click switch');
 
 // ── Fire pistol (semi): ammo -1, juice rises ─────────────────────────────
 const ammoBeforePistol = wc.currentAmmo;
