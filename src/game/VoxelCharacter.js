@@ -684,7 +684,7 @@ export class VoxelCharacter {
       reloading = false,
       reloadT = 0,
       /** m/s actual horizontal speed — preferred over boolean moving */
-      moveSpeed = 0,
+      moveSpeed = null,
     } = state;
     if (dead) {
       this.mesh.rotation.x = Math.min(this.mesh.rotation.x + dt * 3, Math.PI / 2);
@@ -706,8 +706,10 @@ export class VoxelCharacter {
     this._aimBlend = THREE.MathUtils.lerp(this._aimBlend, aimTarget, aimLerp);
     if (aiming && !reloading) this._aimBlend = Math.max(this._aimBlend, 0.55);
 
-    // Locomotion strength from real speed (prevents slide when AI "moves" with frozen anim)
-    const spd = Math.max(moveSpeed, moving ? (sprinting ? 5.2 : 3.6) : 0);
+    // An explicit speed is authoritative: collision-blocked bots must not run in place.
+    // Retain the boolean fallback only for older callers without a speed measurement.
+    const hasActualSpeed = Number.isFinite(moveSpeed);
+    const spd = hasActualSpeed ? Math.max(0, moveSpeed) : moving ? (sprinting ? 5.2 : 3.6) : 0;
     const locoTarget = grounded && spd > 0.35 ? Math.min(1, spd / 5.5) : 0;
     this._moveBlend = THREE.MathUtils.lerp(this._moveBlend, locoTarget, 1 - Math.pow(0.0002, dt));
     const loco = this._moveBlend;

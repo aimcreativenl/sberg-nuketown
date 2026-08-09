@@ -25,6 +25,10 @@ import {
 const BOT_SPEED = 4.6;
 const BOT_SPRINT = 7.0;
 const BOT_STRAFE = 3.8;
+/** Horizontal steering rates (m/s²): responsive starts, softer stops. */
+const BOT_STEER_ACCEL = 18;
+const BOT_STEER_DECEL = 15;
+const BOT_STEER_EPSILON = 0.01;
 /** Jump impulse for fence vaults (must clear ~1.2m tops with body overlap) */
 const BOT_VAULT_JUMP = PLAYER_JUMP * 1.12;
 /** Max obstacle top (world Y) bots will try to vault */
@@ -584,7 +588,6 @@ export class BotManager {
       }
 
       // ── Movement ───────────────────────────────────────────────────────
-      let moving = false;
       let sprinting = false;
       if (bot.target) {
         const dest = bot.target.clone();
@@ -624,8 +627,11 @@ export class BotManager {
           wantMove = false;
         }
 
-        if (wantMove && dist > 0.2) {
-          const dir = toDest.normalize();
+        const hasMoveIntent = wantMove && dist > 0.2;
+        if (hasMoveIntent || Math.hypot(bot.velocity.x, bot.velocity.z) > BOT_STEER_EPSILON) {
+          const dir = hasMoveIntent
+            ? toDest.normalize()
+            : bot.velocity.clone().setY(0).normalize();
           for (const other of this.bots) {
             if (other === bot || other.dead) continue;
             const away = bot.position.clone().sub(other.position);
@@ -649,25 +655,28 @@ export class BotManager {
           }
           if (dir.lengthSq() > 0) dir.normalize();
 
-          sprinting = bot.state === 'chase' || bot.state === 'flank';
-          const speed = sprinting
-            ? BOT_SPRINT * (role.aggression > 1 ? 1.05 : 1)
-            : combatStrafe
+          sprinting = hasMoveIntent && (bot.state === 'chase' || bot.state === 'flank');
+          const speed = !hasMoveIntent
+            ? 0
+            : sprinting
+              ? BOT_SPRINT * (role.aggression > 1 ? 1.05 : 1)
+              : combatStrafe
               ? BOT_STRAFE
               : bot.state === 'attack'
                 ? BOT_SPEED * 0.7
                 : BOT_SPEED * (bot.role === 'scavenger' && bot.state === 'seek_donut' ? 1.1 : 1);
-          const move = dir.multiplyScalar(speed * dt);
-          moving = true;
+          this._steerBotVelocity(bot, hasMoveIntent ? dir : null, speed, dt);
+          const move = this._tmp.set(bot.velocity.x * dt, 0, bot.velocity.z * dt);
 
           if (usingRapier) {
-            this._moveBotRapier(bot, dir, speed, dt);
+            this._moveBotRapier(bot, bot.velocity, dt);
             didRapierMove = true;
           } else if (bot.vaulting && !bot.grounded) {
             // Mid-vault: keep driving forward through/over the fence (ignore low jumpables)
+            bot.velocity.set(bot.airMoveX || 0, 0, bot.airMoveZ || 0);
             const air = bot.position.clone();
-            air.x += (bot.airMoveX || 0) * dt;
-            air.z += (bot.airMoveZ || 0) * dt;
+            air.x += bot.velocity.x * dt;
+            air.z += bot.velocity.z * dt;
             if (!this._blockedVault(air, bot) && !this._moveBlockedVault(bot.position, air, bot)) {
               bot.position.x = air.x;
               bot.position.z = air.z;
@@ -705,30 +714,36 @@ export class BotManager {
               }
               // Walk around first; vault only if still stuck on a fence
               if (bot.stuckTimer > 0.7) {
-                this._unstickBot(bot, dir);
+                this._unstickBot(bot, bot.velocity);
               }
             }
           }
 
-          if (bot.state !== 'attack' && bot.state !== 'chase' && bot.state !== 'cover') {
-            bot.yawTarget = Math.atan2(-dir.x, -dir.z);
-          }
         }
       }
 
-      if (
-        (bot.state === 'attack' || bot.state === 'chase' || bot.state === 'flank' || bot.state === 'cover') &&
-        playerPos
-      ) {
+      const combatFacing =
+        playerPos &&
+        (bot.state === 'attack' ||
+          ((bot.state === 'chase' || bot.state === 'flank' || bot.state === 'cover') &&
+            los &&
+            playerAlive &&
+            !bot.reloading &&
+            bot.peekState !== 'hide' &&
+            distPlayer < ATTACK_RANGE + 4));
+      if (combatFacing) {
         const d = playerPos.clone().sub(bot.position);
         bot.yawTarget = Math.atan2(-d.x, -d.z);
+      } else if (Math.hypot(bot.velocity.x, bot.velocity.z) > BOT_STEER_EPSILON) {
+        bot.yawTarget = Math.atan2(-bot.velocity.x, -bot.velocity.z);
       }
       if (bot.yawTarget == null) bot.yawTarget = bot.yaw;
       bot.yaw = lerpAngle(bot.yaw, bot.yawTarget, 1 - Math.pow(0.00015, dt));
 
       // Idle / AI-paused frames still need gravity + ground snap under Rapier.
       if (usingRapier && !didRapierMove) {
-        this._moveBotRapier(bot, null, 0, dt);
+        this._steerBotVelocity(bot, null, 0, dt);
+        this._moveBotRapier(bot, bot.velocity, dt);
         didRapierMove = true;
       }
 
@@ -818,22 +833,17 @@ export class BotManager {
       bot.character.mesh.position.set(bot.position.x, bot.position.y, bot.position.z);
       bot.character.mesh.rotation.y = bot.yaw;
 
-      const moved = bot.position.distanceTo(preMove);
+      const moved = Math.hypot(bot.position.x - preMove.x, bot.position.z - preMove.z);
       bot.moveSpeed = dt > 1e-6 ? moved / dt : 0;
       bot._prevPos.copy(bot.position);
 
       const reloadT = bot.reloading
         ? 1 - Math.max(0, bot.reloadTimer) / (bot.reloadDuration || 1.35)
         : 0;
-      const animSpeed =
-        bot.moveSpeed > 0.2
-          ? bot.moveSpeed
-          : moving
-            ? (sprinting ? BOT_SPRINT : bot.state === 'attack' ? BOT_STRAFE : BOT_SPEED) * 0.8
-            : 0;
+      const animSpeed = bot.moveSpeed;
       bot.character.updateAnimation(dt, {
-        moving: moving || bot.moveSpeed > 0.35,
-        sprinting: sprinting || bot.moveSpeed > BOT_SPEED * 1.05,
+        moving: bot.moveSpeed > 0.35,
+        sprinting: bot.moveSpeed > BOT_SPEED * 1.05,
         moveSpeed: animSpeed,
         grounded: usingRapier ? !!bot.grounded : true,
         dead: false,
@@ -850,8 +860,8 @@ export class BotManager {
           this._botShoot(bot, playerPos, distPlayer);
           // Re-apply anim once so arm kick is visible immediately this frame
           bot.character.updateAnimation(0, {
-            moving: moving || bot.moveSpeed > 0.35,
-            sprinting: false,
+            moving: bot.moveSpeed > 0.35,
+            sprinting: bot.moveSpeed > BOT_SPEED * 1.05,
             moveSpeed: animSpeed,
             grounded: true,
             dead: false,
@@ -923,11 +933,35 @@ export class BotManager {
   }
 
   /**
-   * Phase 1d: one Rapier character-controller step for a bot.
-   * `dir` is wish heading already scaled by speed*dt from the AI block;
-   * `speed` is m/s. Pass null/`0` to settle in place (gravity + snap).
+   * Bounded horizontal steering shared by the legacy and Rapier resolvers.
+   * Vertical velocity remains owned by the existing vault and gravity paths.
    */
-  _moveBotRapier(bot, dir, speed, dt) {
+  _steerBotVelocity(bot, desiredDir, desiredSpeed, dt) {
+    const desiredX = desiredDir ? desiredDir.x * desiredSpeed : 0;
+    const desiredZ = desiredDir ? desiredDir.z * desiredSpeed : 0;
+    const currentSpeed = Math.hypot(bot.velocity.x, bot.velocity.z);
+    const targetSpeed = Math.hypot(desiredX, desiredZ);
+    const maxDelta = (targetSpeed > currentSpeed ? BOT_STEER_ACCEL : BOT_STEER_DECEL) * dt;
+    const deltaX = desiredX - bot.velocity.x;
+    const deltaZ = desiredZ - bot.velocity.z;
+    const deltaLength = Math.hypot(deltaX, deltaZ);
+
+    if (deltaLength <= maxDelta || deltaLength < BOT_STEER_EPSILON) {
+      bot.velocity.x = desiredX;
+      bot.velocity.z = desiredZ;
+    } else {
+      bot.velocity.x += (deltaX / deltaLength) * maxDelta;
+      bot.velocity.z += (deltaZ / deltaLength) * maxDelta;
+    }
+    bot.velocity.y = 0;
+  }
+
+  /**
+   * Phase 1d: one Rapier character-controller step for a bot.
+   * `velocity` is the smoothed horizontal wish velocity. Pass zero to settle
+   * in place (gravity + snap).
+   */
+  _moveBotRapier(bot, velocity, dt) {
     if (!this.physics || !bot._rapier || !(dt > 0)) return;
 
     let wishVelX = 0;
@@ -937,16 +971,16 @@ export class BotManager {
     if (bot.vaulting && !bot.grounded) {
       wishVelX = bot.airMoveX || 0;
       wishVelZ = bot.airMoveZ || 0;
-    } else if (dir && speed > 0) {
-      wishVelX = dir.x / dt;
-      wishVelZ = dir.z / dt;
+    } else if (velocity && Math.hypot(velocity.x, velocity.z) > BOT_STEER_EPSILON) {
+      wishVelX = velocity.x;
+      wishVelZ = velocity.z;
       const probe = bot.position.clone();
-      probe.x += dir.x;
-      probe.z += dir.z;
+      probe.x += wishVelX * dt;
+      probe.z += wishVelZ * dt;
       this._tryOpenDoorForMove(bot.position, probe);
 
       if (bot.stuckTimer > 0.18 && bot.grounded && (bot.jumpCooldown || 0) <= 0) {
-        if (this._armBotVault(bot, dir)) jumpPressed = true;
+        if (this._armBotVault(bot, velocity)) jumpPressed = true;
       }
       if (bot.stuckTimer > 0.45) {
         this.cb.doors?.requestOpenNear?.(bot.position);
@@ -977,8 +1011,8 @@ export class BotManager {
     }
 
     // After resolve: soft walk-around if still wedged (setNext must follow moveCharacter).
-    if (dir && speed > 0 && bot.stuckTimer > 0.7 && bot.grounded) {
-      this._unstickBotRapier(bot, dir);
+    if (velocity && Math.hypot(velocity.x, velocity.z) > BOT_STEER_EPSILON && bot.stuckTimer > 0.7 && bot.grounded) {
+      this._unstickBotRapier(bot, velocity);
     }
   }
 
@@ -1287,6 +1321,7 @@ export class BotManager {
     bot.underFire = 0;
     bot.hideTime = 0;
     bot.velY = 0;
+    bot.velocity.set(0, 0, 0);
     bot.grounded = true;
     bot.vaulting = false;
     bot.airMoveX = 0;
