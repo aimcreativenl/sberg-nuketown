@@ -316,8 +316,8 @@ export class BotManager {
     const bot = this.bots.find((b) => b.id === botId);
     if (!bot || bot.dead) return { killed: false, headshot: false };
 
-    bot.health -= damage;
     const headshot = !!attackerInfo.headshot;
+    bot.health = headshot ? 0 : bot.health - damage;
     bot.character.updateHealth?.(bot.health, bot.maxHealth);
     if (bot.health <= 0) {
       bot.health = 0;

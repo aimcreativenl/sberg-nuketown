@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { KILL_LIMIT, PLAYER_HEIGHT } from '../game/constants.js';
+import { KILL_LIMIT, PLAYER_HEIGHT, PLAYER_MAX_HP } from '../game/constants.js';
 import {
   NET_MSG,
   SNAPSHOT_HZ,
@@ -17,7 +17,6 @@ import { PoseHistory, clampRewindMs } from './PoseHistory.js';
 
 const FIRE_INTERVAL = 0.15;
 const DMG_BODY = 28;
-const DMG_HEAD = 42;
 const SHOT_RANGE = 80;
 const HEAD_RADIUS = 0.24;
 const CHEST_RADIUS = 0.32;
@@ -353,7 +352,7 @@ export class MpMatch {
       if (!hit) continue;
 
       const victim = hit.pawn;
-      const dmg = hit.headshot ? DMG_HEAD : DMG_BODY;
+      const dmg = hit.headshot ? PLAYER_MAX_HP : DMG_BODY;
       const killed = victim.takeDamage(dmg);
 
       this._emitEvent({

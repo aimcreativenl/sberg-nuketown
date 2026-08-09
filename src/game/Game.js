@@ -1356,7 +1356,7 @@ export class Game {
 
     if (!best) return;
 
-    const dmg = Math.round(shot.damage * (best.headshot ? 1.5 : 1));
+    const dmg = best.headshot ? best.bot.maxHealth : Math.round(shot.damage);
     const result = this.bots.damageBot(best.bot.id, dmg, {
       killerName: 'YOU',
       isPlayer: true,
