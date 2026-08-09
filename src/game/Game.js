@@ -30,7 +30,11 @@ import { GameUI } from './UI.js';
 import { GFX } from './materials.js';
 import { getSettings, setGraphicsPreset, applyToGame } from '../settings/Settings.js';
 import { MenuCamera } from './MenuCamera.js';
-import { rayBlockedBySolids } from './collision.js';
+import {
+  playerMoveBlocked,
+  playerPositionBlocked,
+  rayBlockedBySolids,
+} from './collision.js';
 import { PhysicsManager } from '../physics/PhysicsManager.js';
 import {
   createMatchFlow,
@@ -49,6 +53,13 @@ import {
 import { OnlineSession } from '../net/OnlineSession.js';
 import { MpMatch } from '../net/MpMatch.js';
 import { getModeById } from '../modes/registry.js';
+
+/** Spawn validation is stricter than a single-point overlap check: the player
+ * must have several clear escape directions before combat starts. */
+const PLAYER_SPAWN_ESCAPE_DISTANCE = 2.2;
+const PLAYER_SPAWN_DIRECTION_COUNT = 16;
+const PLAYER_SPAWN_MIN_OPEN_DIRECTIONS = 6;
+const PLAYER_SPAWN_MIN_BOT_GAP = 4;
 
 /** Soft pastel color grade + vignette (no midtone lift — that washed outdoor into white). */
 const PastelGradeShader = {
@@ -1052,25 +1063,97 @@ export class Game {
 
   _playerSpawn() {
     const pts = this.mapData.spawnPoints || [];
-    // Prefer open-road spawns away from house interiors
-    const preferred = pts.filter((p) => Math.abs(p.x) < 8 || Math.abs(p.z) > 10);
-    const pool = preferred.length ? preferred : pts;
-    let best = pool[Math.floor(Math.random() * pool.length)].clone();
-    let bestScore = -Infinity;
-    for (let i = 0; i < 8; i++) {
-      const cand = pool[Math.floor(Math.random() * pool.length)].clone();
-      let minBot = 99;
-      for (const b of this.bots?.bots || []) {
-        if (b.dead) continue;
-        minBot = Math.min(minBot, cand.distanceTo(b.position));
+    if (!pts.length) return new THREE.Vector3(0, PLAYER_HEIGHT, 8);
+
+    // Player spawns stay on the ground. Elevated authored points are useful
+    // cover/AI locations, but starting there can put the capsule inside a
+    // prop or leave it on a narrow roof edge before Rapier has stepped in.
+    const ground = pts.filter((p) => p.y <= PLAYER_HEIGHT + 0.06);
+    const candidates = ground.length ? ground : pts;
+    const colliders = this.mapData.colliders || [];
+    const bots = (this.bots?.bots || []).filter((b) => !b.dead);
+    const fromOpts = { radius: this.player?.radius || 0.38, height: PLAYER_HEIGHT };
+
+    const scorePoint = (point) => {
+      const spawn = point.clone();
+      spawn.y = PLAYER_HEIGHT;
+      const clear = !playerPositionBlocked(spawn, colliders, fromOpts);
+      let openDirections = 0;
+      if (clear) {
+        for (let i = 0; i < PLAYER_SPAWN_DIRECTION_COUNT; i++) {
+          const angle = (i / PLAYER_SPAWN_DIRECTION_COUNT) * Math.PI * 2;
+          const to = {
+            x: spawn.x + Math.cos(angle) * PLAYER_SPAWN_ESCAPE_DISTANCE,
+            y: spawn.y,
+            z: spawn.z + Math.sin(angle) * PLAYER_SPAWN_ESCAPE_DISTANCE,
+          };
+          if (!playerMoveBlocked(spawn, to, colliders, fromOpts)) openDirections++;
+        }
       }
-      if (minBot > bestScore) {
-        bestScore = minBot;
-        best = cand;
+
+      let minBotGap = 99;
+      for (const bot of bots) {
+        minBotGap = Math.min(
+          minBotGap,
+          Math.hypot(spawn.x - bot.position.x, spawn.z - bot.position.z)
+        );
+      }
+
+      return { spawn, clear, openDirections, minBotGap };
+    };
+
+    const scored = candidates.map(scorePoint);
+
+    // First discard trap-like locations; then prefer a location with real
+    // breathing room from bots. If a future map has too few valid points, the
+    // fallback still chooses the least-blocked point instead of crashing.
+    const clearCandidates = scored.filter(
+      (entry) => entry.clear && entry.openDirections >= PLAYER_SPAWN_MIN_OPEN_DIRECTIONS
+    );
+    const gapCandidates = clearCandidates.filter(
+      (entry) => entry.minBotGap >= PLAYER_SPAWN_MIN_BOT_GAP
+    );
+    let pool = gapCandidates.length
+      ? gapCandidates
+      : clearCandidates.length
+        ? clearCandidates
+        : [];
+
+    // Authored points can become stale after a map edit. Search the playable
+    // ground grid before ever accepting a trapped authored point as fallback.
+    if (!pool.length) {
+      const rescue = [];
+      for (let x = -34; x <= 34; x += 2) {
+        for (let z = -34; z <= 34; z += 2) {
+          const entry = scorePoint(new THREE.Vector3(x, PLAYER_HEIGHT, z));
+          if (entry.clear && entry.openDirections >= PLAYER_SPAWN_MIN_OPEN_DIRECTIONS) {
+            rescue.push(entry);
+          }
+        }
+      }
+      pool = rescue;
+    }
+
+    if (!pool.length) {
+      throw new Error('No safe player spawn exists: map ground is fully blocked');
+    }
+    const fallbackPool = pool;
+
+    // Evaluate every candidate (rather than eight random samples) so a bad
+    // point cannot win simply because it was sampled early in the match.
+    let best = fallbackPool[0];
+    let bestScore = -Infinity;
+    for (const entry of fallbackPool) {
+      const score =
+        Math.min(entry.minBotGap, 20) +
+        entry.openDirections * 0.35 +
+        Math.random() * 0.02;
+      if (score > bestScore) {
+        bestScore = score;
+        best = entry;
       }
     }
-    best.y = PLAYER_HEIGHT;
-    return best;
+    return best.spawn.clone();
   }
 
   _loop() {
