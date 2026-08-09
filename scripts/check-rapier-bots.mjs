@@ -45,10 +45,19 @@ function syncFeetFromRapier(bot) {
   bot.grounded = !!bot._rapier.grounded;
 }
 
-// Settle on ground via BotManager idle Rapier settle
+// Settle on ground with zero-input Rapier steps. Calling bots.update() here
+// would also run patrol/vault AI, making this ground assertion timing-flaky.
 for (let i = 0; i < 60; i++) {
-  bots.update(1 / 60);
+  for (const bot of bots.bots) {
+    physics.moveCharacter(bot._rapier, {
+      wishVelX: 0,
+      wishVelZ: 0,
+      jumpPressed: false,
+      dt: 1 / 60,
+    });
+  }
   physics.step(1 / 60);
+  for (const bot of bots.bots) syncFeetFromRapier(bot);
 }
 for (const bot of bots.bots) {
   assert(bot.grounded, `${bot.name} should be grounded after settle`);

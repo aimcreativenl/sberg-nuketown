@@ -17,6 +17,7 @@
     "test:map": "node scripts/check-map.mjs",
     "test:stairs": "node scripts/check-stairs.mjs",
     "test:colliders": "node scripts/check-colliders.mjs",
+    "test:player-spawns": "node scripts/check-player-spawns.mjs",
     "test:house-walls": "node scripts/check-house-walls.mjs",
     "test:house-interior": "node scripts/check-house-interior.mjs",
     "test:house-windows": "node scripts/check-house-windows.mjs",

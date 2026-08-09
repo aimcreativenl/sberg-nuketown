@@ -3,10 +3,23 @@
 **Project (actueel):** `c:\Users\Gebruiker\Desktop\AI projecten\Sbarg Nuketown`  
 **Stack:** Three.js r185 + Vite (vanilla JS modules) + Rapier + ws  
 **Play:** `npm run dev` → **http://127.0.0.1:5173/** · Live: https://sberg-nuketown.vercel.app/  
-**Laatst bijgewerkt:** 2026-08-06  
+**Laatst bijgewerkt:** 2026-08-09
 
 > **Voor AI-agents:** lees eerst **`CONTINUITY.md`** (dan `HANDOFF.md` / `ROADMAP.md`).  
 > Dit CHANGELOG is chronologisch; oudere secties kunnen verouderd zijn.
+
+---
+
+## 2026-08-09 — Player spawn stuck-fix
+
+- Root cause: 7 van de 29 map-spawnpunten overlappen solide voertuigen/blokken op de spelerhoogte; `_playerSpawn()` valideerde die punten niet.
+- Fix: `MapBuilder.buildMap()` publiceert alleen spawnpunten waarvan de volledige speler-capsule vrij is; 22 veilige punten blijven over voor speler en bots.
+- Regressietest toegevoegd: `npm run test:player-spawns`.
+- De test heeft vóór de fix aantoonbaar gefaald met de 7 overlapcoördinaten; na de fix is de output `spawnPoints: 22, blocked: 0, rejectedKnownBad: 7`.
+- De bestaande Rapier-botsettle-test is deterministisch gemaakt: de ground-check gebruikt nu nul-input physics-steps in plaats van tegelijk patrouillerende/vaultende AI; dit verandert geen runtimegedrag.
+- Gecontroleerd met browser: offline PLAY start vrij en `KeyD` verplaatst de speler; geen console-errors.
+- Relevante checks: `test:map`, `test:colliders`, `test:physics-ground`, `test:rapier-player`, `test:phase-b-bots`, `test:rapier-bots` en `build` groen.
+- Onafhankelijke scoped re-review: spec compliance PASS, task quality PASS, geen P0/P1/P2; commit toegestaan.
 
 ---
 

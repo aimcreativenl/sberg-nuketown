@@ -16,7 +16,8 @@ import {
   GFX,
 } from './materials.js';
 import { roundedBoxGeo } from './softGeo.js';
-import { makeAabbCollider } from './collision.js';
+import { makeAabbCollider, playerPositionBlocked } from './collision.js';
+import { PLAYER_HEIGHT, PLAYER_RADIUS } from './constants.js';
 
 export { createMat } from './materials.js';
 
@@ -3039,13 +3040,23 @@ export function buildMap(scene) {
 
   scene.add(group);
 
+  // Spawn points are authored near landmarks, vehicles and house fronts, so
+  // some can overlap solid geometry after prop/collider changes. The player
+  // reset normalizes every offline spawn to standing eye height; publish only
+  // points whose full player capsule is clear at that actual height.
+  const safeSpawnPoints = spawnPoints.filter((spawn) => !playerPositionBlocked(
+    { x: spawn.x, y: PLAYER_HEIGHT, z: spawn.z },
+    colliders,
+    { height: PLAYER_HEIGHT, radius: PLAYER_RADIUS },
+  ));
+
   return {
     group,
     colliders,
     floors,
     doors,
     roofMantleZones,
-    spawnPoints,
+    spawnPoints: safeSpawnPoints,
     coverPoints,
     waypoints,
   };
