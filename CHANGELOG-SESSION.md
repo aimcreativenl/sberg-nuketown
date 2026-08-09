@@ -10,6 +10,15 @@
 
 ---
 
+## 2026-08-09 — Stale dev-server correction
+
+- De eerdere speel-link `http://127.0.0.1:5175/` wees naar een oude Vite-process/build: de geserveerde `MapBuilder.js` bevatte geen `safeSpawnPoints`/`playerPositionBlocked`-filter.
+- Dit verklaarde waarom de gebruiker ondanks commit `bf67e26` nog exact op de oude blokpositie spawnde.
+- De oude listener op poort 5175 is vervangen door een Vite-server vanuit deze workspace; de live bron bevat nu aantoonbaar de spawnfix.
+- Verse browser-start op `:5175`: speler verschijnt op open terrein; `KeyD` en `KeyW` verplaatsen de camera/speler zichtbaar; console-errors: 0.
+
+---
+
 ## 2026-08-09 — Player spawn stuck-fix
 
 - Root cause: 7 van de 29 map-spawnpunten overlappen solide voertuigen/blokken op de spelerhoogte; `_playerSpawn()` valideerde die punten niet.
