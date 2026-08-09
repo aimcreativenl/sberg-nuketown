@@ -74,7 +74,23 @@ assert(switchClick.ammoBySlot[1] === m16AmmoBeforeClickSwitch, 'M16 ammo unchang
 
 const switchRelease = new WeaponController(camera, null, null, null);
 switchRelease.update(1 / 60, makeInput({ weaponSlot: 1, shoot: true }), true);
-switchRelease.update(1 / 60, makeInput({ weaponSlot: 0, shoot: true }), true);
+let semiFireCallsOnSwitch = 0;
+const pistolAmmoBeforeSwitch = switchRelease.ammoBySlot[0];
+const switchToPistolShots = switchRelease.update(
+  1 / 60,
+  makeInput({
+    weaponSlot: 0,
+    shoot: true,
+    shootClick: true,
+    onSemiFire: () => {
+      semiFireCallsOnSwitch++;
+    },
+  }),
+  true
+);
+assert(switchToPistolShots.length === 0, 'buffered pistol click does not fire on weapon switch');
+assert(semiFireCallsOnSwitch === 0, 'buffered pistol click is not consumed on weapon switch');
+assert(switchRelease.ammoBySlot[0] === pistolAmmoBeforeSwitch, 'pistol ammo unchanged on click switch');
 const heldAfterSwitchShots = switchRelease.update(1 / 60, makeInput({ shoot: true }), true);
 assert(heldAfterSwitchShots.length === 0, 'held trigger stays held after switching to pistol');
 switchRelease.update(1 / 60, makeInput({ shoot: false }), true);
