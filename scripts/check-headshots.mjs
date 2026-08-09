@@ -77,6 +77,39 @@ assert(
 );
 assert(resolverBot.dead === true, 'offline resolver headshot marks bot dead');
 
+// Bot A's closest body hit is between Bot B's overlapping torso and head hits.
+// The resolver must first select B's head, then compare A (4.74m) vs B (4.76m).
+const maskingBots = new BotManager(new THREE.Scene(), mapData);
+maskingBots.spawnAll(2);
+const maskingBodies = [
+  { head: new THREE.Vector3(0, 2, -5), radius: 0.26 },
+  { head: new THREE.Vector3(0, 0, -5), radius: 0.28 },
+];
+for (const [index, bot] of maskingBots.bots.entries()) {
+  const { head, radius } = maskingBodies[index];
+  bot.character.getHeadWorldPosition = () => head.clone();
+  bot.character.getHitVolumes = () => [
+    ...(index === 1 ? [{ kind: 'sphere', center: head.clone(), radius: 0.24, headshot: true }] : []),
+    { kind: 'sphere', center: new THREE.Vector3(0, 0, -5), radius, headshot: false },
+  ];
+}
+const maskingContext = {
+  ...resolverContext,
+  bots: maskingBots,
+};
+Game.prototype._resolvePlayerShot.call(maskingContext, {
+  origin: new THREE.Vector3(0, 0, 0),
+  direction: new THREE.Vector3(0, 0, -1),
+  range: 80,
+  damage: 26,
+  weaponId: 'pistol',
+});
+assert(maskingBots.bots[0].health === 74, `closest bot body takes damage (got ${maskingBots.bots[0].health})`);
+assert(
+  maskingBots.bots[1].health === 100,
+  `farther bot head does not mask closer bot body (got ${maskingBots.bots[1].health})`
+);
+
 function runHostShot(headshot) {
   const match = new MpMatch({ isHost: true, localId: 'attacker' });
   match.begin(

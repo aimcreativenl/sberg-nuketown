@@ -1343,7 +1343,7 @@ export class Game {
           vol.kind === 'capsule'
             ? this._rayHitsCapsule(shot.origin, shot.direction, vol.a, vol.b, vol.radius)
             : this._rayHitsSphere(shot.origin, shot.direction, vol.center, vol.radius);
-        if (!hit || hit.dist > bestDist || hit.dist < 0.05) continue;
+        if (!hit || hit.dist > shot.range || hit.dist < 0.05) continue;
         if (this._shotBlocked(shot.origin, hit.point, hit.dist)) continue;
         const headshot = !!vol.headshot && hit.point.distanceTo(head) <= (vol.radius ?? 0.24) + 0.05;
         const candidate = {
