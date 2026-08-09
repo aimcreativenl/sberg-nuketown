@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as THREE from 'three';
+import { BotManager } from '../src/game/BotAI.js';
 import { VoxelCharacter } from '../src/game/VoxelCharacter.js';
 
 const failures = [];
@@ -45,6 +46,52 @@ for (let i = 0; i < 15; i++) {
 }
 const idleVar = Math.max(...idle) - Math.min(...idle);
 assert(idleVar < 0.2, `idle leg variance small ${idleVar.toFixed(3)}`);
+
+// Legacy vaulting must reach VoxelCharacter as airborne in both the normal
+// animation call and the same-frame post-shot animation refresh.
+const airborneScene = new THREE.Scene();
+const airborneManager = new BotManager(
+  airborneScene,
+  {
+    colliders: [],
+    floors: [{ minX: -20, maxX: 20, minZ: -20, maxZ: 20, y: 0 }],
+    spawnPoints: [new THREE.Vector3(0, 0, 0)],
+    waypoints: [new THREE.Vector3(0, 0, 10)],
+    coverPoints: [],
+  },
+  {
+    getPlayerPosition: () => new THREE.Vector3(0, 1.7, 10),
+    getPlayerAlive: () => true,
+    getPlayerKills: () => 0,
+    getPlayerHealth: () => 100,
+    getDonuts: () => [],
+  }
+);
+airborneManager.spawnAll(1);
+const airborneBot = airborneManager.bots[0];
+airborneBot.position.set(0, 2, 0);
+airborneBot.lastPos.copy(airborneBot.position);
+airborneBot._prevPos.copy(airborneBot.position);
+airborneBot.character.mesh.position.copy(airborneBot.position);
+airborneBot.vaulting = true;
+airborneBot.grounded = false;
+airborneBot.velY = 0;
+airborneBot.airMoveZ = 5;
+airborneBot.peekState = 'shoot';
+airborneBot.losTimer = 1;
+airborneBot.aimTimer = 1;
+airborneBot.fireCooldown = 0;
+airborneBot.ammo = 3;
+airborneBot.character.animPhase = 0;
+airborneBot.character._moveBlend = 0;
+airborneManager.update(0.05);
+assert(!airborneBot.grounded, 'legacy vault remains airborne during animation update');
+assert(airborneBot.fireCooldown > 0, 'airborne bot fires so post-shot animation refresh runs');
+assert(
+  airborneBot.character.hipL.rotation.x < -0.15,
+  `airborne vault uses VoxelCharacter air pose (${airborneBot.character.hipL.rotation.x.toFixed(3)})`
+);
+airborneManager.clear();
 
 // Source guards: BotAI must not pass moving && !aiming
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
