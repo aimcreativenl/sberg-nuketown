@@ -16,6 +16,7 @@
 - Dit verklaarde waarom de gebruiker ondanks commit `bf67e26` nog exact op de oude blokpositie spawnde.
 - De oude listener op poort 5175 is vervangen door een Vite-server vanuit deze workspace; de live bron bevat nu aantoonbaar de spawnfix.
 - Verse browser-start op `:5175`: speler verschijnt op open terrein; `KeyD` en `KeyW` verplaatsen de camera/speler zichtbaar; console-errors: 0.
+- Onafhankelijke subagent-verificatie: PASS — `test:player-spawns`, `test:map`, `build` en de live broncheck op `:5175` zijn geslaagd; alleen de bestaande chunk-size-waarschuwing blijft.
 
 ---
 

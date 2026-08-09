@@ -8,7 +8,8 @@ Original prompt: Fix the game start where the player spawns on blocks beside an 
 - The stale process on `:5175` was replaced with the current workspace server.
 - Fresh `:5175` browser start now places the player in open terrain; repeated `KeyD` and `KeyW` input visibly changes the view/position.
 - Browser console errors: 0.
-- Regression/build verification and independent review are pending in this session.
+- Regression/build verification: PASS — 22 safe points, 0 blocked, map checks green, production build green.
+- Independent verifier: PASS — live `:5175` source contains both `safeSpawnPoints` and `playerPositionBlocked`; only the existing chunk-size warning remains.
 
 ## Handoff
 
