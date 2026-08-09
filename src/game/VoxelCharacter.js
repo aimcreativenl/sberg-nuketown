@@ -29,12 +29,13 @@ export const PASTEL_OUTFITS = [
 /** Shared character geo/mat pools (Option A Phase 4 perf). */
 const _charMatCache = new Map();
 const _charGeoCache = new Map();
-const CHAR_SOFT_SEGS = 2;
+const CHAR_SOFT_SEGS = 3;
+const CHAR_TINY_SEGS = 2;
 
 /** Modest corner radius — soft toy, still blocky pastel DNA. */
 function softRadius(w, h, d) {
   const m = Math.min(w, h, d);
-  return Math.min(0.055, m * 0.26);
+  return Math.min(0.11, m * 0.35);
 }
 
 function charMat(color, kind = 'body') {
@@ -61,12 +62,34 @@ function charMat(color, kind = 'body') {
   return m;
 }
 
-function charGeo(w, h, d, radius) {
+function charGeo(w, h, d, radius, segments = CHAR_SOFT_SEGS) {
   const r = radius ?? softRadius(w, h, d);
-  const key = `${w.toFixed(3)}_${h.toFixed(3)}_${d.toFixed(3)}_r${r.toFixed(3)}_${CHAR_SOFT_SEGS}`;
+  const key = `${w.toFixed(3)}_${h.toFixed(3)}_${d.toFixed(3)}_r${r.toFixed(3)}_${segments}`;
   let g = _charGeoCache.get(key);
   if (!g) {
-    g = roundedBoxGeo(w, h, d, r, CHAR_SOFT_SEGS);
+    g = roundedBoxGeo(w, h, d, r, segments);
+    g.userData.shared = true;
+    _charGeoCache.set(key, g);
+  }
+  return g;
+}
+
+function charSphereGeo(radius, widthSegments = 12, heightSegments = 8) {
+  const key = `sphere_${radius.toFixed(3)}_${widthSegments}_${heightSegments}`;
+  let g = _charGeoCache.get(key);
+  if (!g) {
+    g = new THREE.SphereGeometry(radius, widthSegments, heightSegments);
+    g.userData.shared = true;
+    _charGeoCache.set(key, g);
+  }
+  return g;
+}
+
+function charCapsuleGeo(radius, length, capSegments = 4, radialSegments = 8) {
+  const key = `capsule_${radius.toFixed(3)}_${length.toFixed(3)}_${capSegments}_${radialSegments}`;
+  let g = _charGeoCache.get(key);
+  if (!g) {
+    g = new THREE.CapsuleGeometry(radius, length, capSegments, radialSegments);
     g.userData.shared = true;
     _charGeoCache.set(key, g);
   }
@@ -74,7 +97,22 @@ function charGeo(w, h, d, radius) {
 }
 
 function part(w, h, d, color, kind = 'body', radius) {
-  const m = new THREE.Mesh(charGeo(w, h, d, radius), charMat(color, kind));
+  const segments = Math.min(w, h, d) <= 0.12 ? CHAR_TINY_SEGS : CHAR_SOFT_SEGS;
+  const m = new THREE.Mesh(charGeo(w, h, d, radius, segments), charMat(color, kind));
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
+function spherePart(radius, color, kind = 'body') {
+  const m = new THREE.Mesh(charSphereGeo(radius), charMat(color, kind));
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
+function capsulePart(radius, length, color, kind = 'body') {
+  const m = new THREE.Mesh(charCapsuleGeo(radius, length), charMat(color, kind));
   m.castShadow = true;
   m.receiveShadow = true;
   return m;
@@ -255,32 +293,32 @@ export class VoxelCharacter {
     this.shoulderL = new THREE.Group();
     this.shoulderL.position.set(-0.38, 0.56, 0);
     this.hips.add(this.shoulderL);
-    const padL = part(0.2, 0.14, 0.2, o.accent);
+    const padL = spherePart(0.13, o.accent);
     padL.position.set(0, 0.02, 0);
     this.shoulderL.add(padL);
-    this.armL = part(0.14, 0.28, 0.14, o.body);
+    this.armL = capsulePart(0.085, 0.18, o.body);
     this.armL.position.y = -0.18;
     this.shoulderL.add(this.armL);
-    const forearmL = part(0.12, 0.22, 0.12, o.body);
+    const forearmL = capsulePart(0.07, 0.14, o.body);
     forearmL.position.y = -0.42;
     this.shoulderL.add(forearmL);
-    const handL = part(0.12, 0.12, 0.12, skin);
+    const handL = spherePart(0.07, skin);
     handL.position.y = -0.56;
     this.shoulderL.add(handL);
 
     this.shoulderR = new THREE.Group();
     this.shoulderR.position.set(0.38, 0.56, 0);
     this.hips.add(this.shoulderR);
-    const padR = part(0.2, 0.14, 0.2, o.accent);
+    const padR = spherePart(0.13, o.accent);
     padR.position.set(0, 0.02, 0);
     this.shoulderR.add(padR);
-    this.armR = part(0.14, 0.28, 0.14, o.body);
+    this.armR = capsulePart(0.085, 0.18, o.body);
     this.armR.position.y = -0.18;
     this.shoulderR.add(this.armR);
-    const forearmR = part(0.12, 0.22, 0.12, o.body);
+    const forearmR = capsulePart(0.07, 0.14, o.body);
     forearmR.position.y = -0.42;
     this.shoulderR.add(forearmR);
-    const handR = part(0.12, 0.12, 0.12, skin);
+    const handR = spherePart(0.07, skin);
     handR.position.y = -0.56;
     this.shoulderR.add(handR);
 
@@ -293,10 +331,10 @@ export class VoxelCharacter {
     this.hipL = new THREE.Group();
     this.hipL.position.set(-0.15, 0.95, 0);
     this.mesh.add(this.hipL);
-    this.legL = part(0.17, 0.3, 0.17, o.accent);
+    this.legL = capsulePart(0.1, 0.22, o.accent);
     this.legL.position.y = -0.16;
     this.hipL.add(this.legL);
-    const shinL = part(0.15, 0.26, 0.15, o.body);
+    const shinL = capsulePart(0.087, 0.18, o.body);
     shinL.position.y = -0.42;
     this.hipL.add(shinL);
     this.footL = part(0.18, 0.1, 0.28, 0x6a5a7a);
@@ -306,10 +344,10 @@ export class VoxelCharacter {
     this.hipR = new THREE.Group();
     this.hipR.position.set(0.15, 0.95, 0);
     this.mesh.add(this.hipR);
-    this.legR = part(0.17, 0.3, 0.17, o.accent);
+    this.legR = capsulePart(0.1, 0.22, o.accent);
     this.legR.position.y = -0.16;
     this.hipR.add(this.legR);
-    const shinR = part(0.15, 0.26, 0.15, o.body);
+    const shinR = capsulePart(0.087, 0.18, o.body);
     shinR.position.y = -0.42;
     this.hipR.add(shinR);
     this.footR = part(0.18, 0.1, 0.28, 0x6a5a7a);

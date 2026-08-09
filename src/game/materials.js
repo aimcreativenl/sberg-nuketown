@@ -394,7 +394,7 @@ export function createCharMat(color) {
     name: 'character',
     roughness: 0.72,
     metalness: 0.06,
-    flatShading: true,
+    flatShading: false,
   });
 }
 
