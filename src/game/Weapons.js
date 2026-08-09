@@ -617,7 +617,9 @@ export class WeaponController {
     if (this.viewModel) this.viewModel.visible = true;
 
     // Hotkeys 1 / 2
+    let switchedSlot = false;
     if (input.weaponSlot === 0 || input.weaponSlot === 1) {
+      switchedSlot = input.weaponSlot !== this.slot;
       this.setLoadoutSlot(input.weaponSlot);
     }
 
@@ -737,6 +739,7 @@ export class WeaponController {
       // Prefer explicit click buffer; also allow classic edge if buffer empty
       triggerPulled = shootClick || (wantShoot && !this.wasShoot);
     }
+    if (switchedSlot) triggerPulled = false;
     const canFire =
       !this.reloading &&
       this.cooldown <= 0 &&

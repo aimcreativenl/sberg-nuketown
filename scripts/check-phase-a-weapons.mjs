@@ -55,6 +55,32 @@ assert(juice0.recoil === 0, 'start recoil 0');
 assert(juice0.kickPitch === 0, 'start kickPitch 0');
 assert(juice0.punchLength === 0, 'start punchLength 0');
 
+// Switching weapons must not turn an already-held trigger into a shot.
+const switchHeld = new WeaponController(camera, null, null, null);
+const m16AmmoBeforeHeldSwitch = switchHeld.ammoBySlot[1];
+const heldSwitchShots = switchHeld.update(1 / 60, makeInput({ weaponSlot: 1, shoot: true }), true);
+assert(heldSwitchShots.length === 0, 'held trigger does not fire on weapon switch');
+assert(switchHeld.ammoBySlot[1] === m16AmmoBeforeHeldSwitch, 'M16 ammo unchanged on held switch');
+
+const switchClick = new WeaponController(camera, null, null, null);
+const m16AmmoBeforeClickSwitch = switchClick.ammoBySlot[1];
+const clickSwitchShots = switchClick.update(
+  1 / 60,
+  makeInput({ weaponSlot: 1, shoot: true, shootClick: true }),
+  true
+);
+assert(clickSwitchShots.length === 0, 'click does not fire on weapon switch');
+assert(switchClick.ammoBySlot[1] === m16AmmoBeforeClickSwitch, 'M16 ammo unchanged on click switch');
+
+const switchRelease = new WeaponController(camera, null, null, null);
+switchRelease.update(1 / 60, makeInput({ weaponSlot: 1, shoot: true }), true);
+switchRelease.update(1 / 60, makeInput({ weaponSlot: 0, shoot: true }), true);
+const heldAfterSwitchShots = switchRelease.update(1 / 60, makeInput({ shoot: true }), true);
+assert(heldAfterSwitchShots.length === 0, 'held trigger stays held after switching to pistol');
+switchRelease.update(1 / 60, makeInput({ shoot: false }), true);
+const freshPistolShots = switchRelease.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
+assert(freshPistolShots.length === 1, 'fresh pistol click fires exactly one shot after release');
+
 // ── Fire pistol (semi): ammo -1, juice rises ─────────────────────────────
 const ammoBeforePistol = wc.currentAmmo;
 const shotsP = wc.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
