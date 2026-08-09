@@ -1328,6 +1328,8 @@ export class Game {
 
     for (const bot of this.bots.getAliveBots()) {
       const head = bot.character.getHeadWorldPosition();
+      let botBest = null;
+      let headCandidate = null;
       const volumes =
         typeof bot.character.getHitVolumes === 'function'
           ? bot.character.getHitVolumes()
@@ -1344,13 +1346,33 @@ export class Game {
         if (!hit || hit.dist > bestDist || hit.dist < 0.05) continue;
         if (this._shotBlocked(shot.origin, hit.point, hit.dist)) continue;
         const headshot = !!vol.headshot && hit.point.distanceTo(head) <= (vol.radius ?? 0.24) + 0.05;
-        best = {
+        const candidate = {
           bot,
           dist: hit.dist,
           headshot,
           point: hit.point,
+          headRadius: vol.radius ?? 0.24,
         };
-        bestDist = hit.dist;
+        if (headshot) {
+          if (!headCandidate || candidate.dist < headCandidate.dist) headCandidate = candidate;
+        } else if (!botBest || candidate.dist < botBest.dist) {
+          botBest = candidate;
+        }
+      }
+
+      const bodyOverlapsHead =
+        headCandidate &&
+        botBest &&
+        botBest.point.distanceTo(head) <= headCandidate.headRadius + 0.05;
+      if (
+        headCandidate &&
+        (!botBest || headCandidate.dist <= botBest.dist || bodyOverlapsHead)
+      ) {
+        botBest = headCandidate;
+      }
+      if (botBest && botBest.dist <= bestDist) {
+        best = botBest;
+        bestDist = botBest.dist;
       }
     }
 

@@ -4,6 +4,7 @@
  */
 import * as THREE from 'three';
 import { BotManager } from '../src/game/BotAI.js';
+import { Game } from '../src/game/Game.js';
 import { MpMatch } from '../src/net/MpMatch.js';
 
 const failures = [];
@@ -42,6 +43,39 @@ const body = bots.damageBot(bodyBot.id, 1, { headshot: false });
 assert(body.killed === false, 'low-damage body shot does not kill bot');
 assert(bodyBot.health === 99, `body shot keeps normal damage (got ${bodyBot.health})`);
 assert(bodyBot.dead === false, 'body shot leaves bot alive');
+
+// Exercise the real offline resolver against the overlapping head/torso hit volumes.
+// UI/audio/particles are inert because this test's observable contract is hit selection.
+const resolverScene = new THREE.Scene();
+const resolverBots = new BotManager(resolverScene, mapData);
+resolverBots.spawnAll(1);
+resolverScene.updateMatrixWorld(true);
+const resolverBot = resolverBots.bots[0];
+const resolverHead = resolverBot.character.getHeadWorldPosition();
+const resolverOrigin = resolverHead.clone().add(new THREE.Vector3(0, 0, 5));
+const resolverContext = {
+  bots: resolverBots,
+  _rayHitsSphere: Game.prototype._rayHitsSphere,
+  _rayHitsCapsule: Game.prototype._rayHitsCapsule,
+  _shotBlocked: () => false,
+  particles: { bloodPuff() {}, hitSparks() {} },
+  ui: { showHitmarker() {}, showDamageNumber() {} },
+  audio: { playHeadshot() {}, playHit() {} },
+  hitPunch: { pitch: 0, yaw: 0 },
+  _playerGotKill() {},
+};
+Game.prototype._resolvePlayerShot.call(resolverContext, {
+  origin: resolverOrigin,
+  direction: resolverHead.clone().sub(resolverOrigin).normalize(),
+  range: 80,
+  damage: 26,
+  weaponId: 'pistol',
+});
+assert(
+  resolverBot.health === 0,
+  `offline resolver headshot wins over overlapping torso (got ${resolverBot.health})`
+);
+assert(resolverBot.dead === true, 'offline resolver headshot marks bot dead');
 
 function runHostShot(headshot) {
   const match = new MpMatch({ isHost: true, localId: 'attacker' });
