@@ -314,6 +314,14 @@ body,
   background: rgba(255, 143, 171, 0.2);
 }
 
+.lobby-players li.team-alpha {
+  border-left: 4px solid #ff8fab;
+}
+
+.lobby-players li.team-bravo {
+  border-left: 4px solid #6bb6c4;
+}
+
 .lobby-field {
   display: flex;
   flex-direction: column;
@@ -613,6 +621,10 @@ kbd {
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--hud-muted);
+}
+
+.kill-entry.ctf {
+  color: var(--hud-accent-warm);
 }
 
 @keyframes slideIn {
@@ -1100,6 +1112,26 @@ kbd {
   box-shadow: var(--hud-shadow);
 }
 
+.flag-carry {
+  position: absolute;
+  top: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  font-family: 'Syne', 'Nunito', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--hud-accent-warm);
+  background: var(--hud-glass);
+  backdrop-filter: blur(10px);
+  padding: 0.35rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--hud-border-warm);
+  box-shadow: var(--hud-shadow);
+  pointer-events: none;
+}
+
 @keyframes toastPop {
   0% {
     opacity: 0;
@@ -1213,6 +1245,14 @@ kbd {
   border: 1px solid rgba(255, 158, 184, 0.4);
 }
 
+.sb-row.team-alpha {
+  box-shadow: inset 3px 0 0 #ff8fab;
+}
+
+.sb-row.team-bravo {
+  box-shadow: inset 3px 0 0 #6bb6c4;
+}
+
 .sb-row:nth-child(even):not(.head):not(.player) {
   background: rgba(255, 248, 242, 0.05);
 }
@@ -1294,6 +1334,14 @@ kbd {
 .mini-sb-row.player {
   background: rgba(255, 158, 184, 0.18);
   border: 1px solid rgba(255, 158, 184, 0.4);
+}
+
+.mini-sb-row.team-alpha {
+  box-shadow: inset 3px 0 0 #ff8fab;
+}
+
+.mini-sb-row.team-bravo {
+  box-shadow: inset 3px 0 0 #6bb6c4;
 }
 
 .mini-sb-row:nth-child(even):not(.head):not(.player) {

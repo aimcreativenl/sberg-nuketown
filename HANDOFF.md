@@ -3,10 +3,10 @@
 > **Nieuwe chat?** Lees eerst **[`CONTINUITY.md`](CONTINUITY.md)** — dat is de actuele single source of truth.  
 > Dit bestand is een korte spiegel zodat oude prompts die “HANDOFF” noemen nog kloppen.
 
-**Laatst bijgewerkt:** 2026-08-09 (spawn escape fix)
+**Laatst bijgewerkt:** 2026-08-14 (Phase 3 TDM/CTF/thin BR live)
 **Lokale game:** http://127.0.0.1:5175/
 **Progress dashboard:** http://127.0.0.1:8766/
-**Workspace checkpoint:** branch `codex/fix-player-spawn`, current branch tip (functional fix `86e1cac`)
+**Workspace checkpoint:** `main` — online TDM/CTF/thin BR + spawn/weapon polish
 **Live:** https://sberg-nuketown.vercel.app/ · hub https://sbarg-nuketown-hub.onrender.com  
 **Repo:** https://github.com/aimcreativenl/sberg-nuketown · branch `main`
 
@@ -21,7 +21,7 @@
 | Phase 0–1, 2a–2c | DONE |
 | **Phase 4a** reconcile / remote interp / lag-comp | **DONE** (`56be586`) |
 | Phase 4b reconnect / migration | OPEN |
-| Phase 3 mode content (TDM/CTF/BR speelbaar) | OPEN — **aanbevolen next feature** |
+| Phase 3 mode content (TDM/CTF/thin BR) | **DONE** |
 
 ### A.2 Recent gefixt (niet opnieuw debugggen)
 
@@ -49,9 +49,9 @@ npm run build
 
 De lokale spawn-blocker is opgelost en geverifieerd in `86e1cac`. Gebruik de actuele lokale game-link hierboven; een oude tab op een andere Vite-poort kan nog een oude build tonen.
 
-1. Online DM playtesten op live URL (hard refresh na deploy)  
-2. **Phase 3** — echte TDM/CTF/BR gameplay  
-3. **Phase 4b** — reconnect als nodig  
+1. Live playtesten: Host + Join, TDM / CTF / Battle Royale (hard refresh)  
+2. **Phase 4b** — reconnect als disconnects pijn doen  
+3. **Phase 5** — tweede map  
 
 Details, gotchas, architectuur: **[`CONTINUITY.md`](CONTINUITY.md)**.  
 Fasen-checklist: **[`ROADMAP.md`](ROADMAP.md)**.  

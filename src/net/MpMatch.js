@@ -1,5 +1,14 @@
 import * as THREE from 'three';
 import { KILL_LIMIT, PLAYER_HEIGHT, PLAYER_MAX_HP } from '../game/constants.js';
+import { getModeById } from '../modes/registry.js';
+import { pickTeamSpawn, teamOutfitIndex, teamReachedLimit } from '../modes/tdm.js';
+import {
+  createCtfState,
+  stepCtf,
+  flagsToNet,
+  applyFlagsNet,
+} from '../modes/ctf.js';
+import { BR_ZONE, zoneRadiusAt, isOutsideZone } from '../modes/pubg.js';
 import {
   NET_MSG,
   SNAPSHOT_HZ,
@@ -39,7 +48,10 @@ export class MpMatch {
    *   getLocalPlayer?: () => import('../game/Player.js').Player|null,
    *   getWeapons?: () => object|null,
    *   getDoors?: () => import('../game/Doors.js').DoorManager|null,
+   *   getFlags?: () => import('../game/Flags.js').FlagManager|null,
+   *   getZone?: () => import('../game/Zone.js').ZoneRing|null,
    *   onEvent?: (msg: import('./NetTypes.js').EventMsg) => void,
+   *   mode?: import('../modes/IGameMode.js').IGameMode,
    * }} opts
    */
   constructor({
@@ -52,7 +64,10 @@ export class MpMatch {
     getLocalPlayer = null,
     getWeapons = null,
     getDoors = null,
+    getFlags = null,
+    getZone = null,
     onEvent = null,
+    mode = null,
   }) {
     this.session = session;
     this.isHost = !!isHost;
@@ -63,7 +78,17 @@ export class MpMatch {
     this.getLocalPlayer = getLocalPlayer;
     this.getWeapons = getWeapons;
     this.getDoors = getDoors;
+    this.getFlags = getFlags;
+    this.getZone = getZone;
     this.onEvent = onEvent;
+    this.mode = mode || getModeById('deathmatch');
+    /** @type {{ alpha: number, bravo: number }} */
+    this.teamKills = { alpha: 0, bravo: 0 };
+    this.captures = { alpha: 0, bravo: 0 };
+    this.ctf = null;
+    this.matchTime = 0;
+    this.zone = null;
+    this._zoneDmgAcc = 0;
 
     /** @type {Map<string, NetPawn>} */
     this.pawns = new Map();
@@ -110,6 +135,26 @@ export class MpMatch {
     this._prevInteract.clear();
     this._inputHistory.clear();
     this._poseHistory.clear();
+    this.teamKills = { alpha: 0, bravo: 0 };
+    this.captures = { alpha: 0, bravo: 0 };
+    this.ctf = null;
+    if (this.mode?.id === 'ctf') {
+      this.ctf = createCtfState(this.mapData?.flagHomes);
+      this.captures = this.ctf.captures;
+      this.mode.onMatchStart?.(this);
+    }
+    this.matchTime = 0;
+    this.zone = null;
+    this._zoneDmgAcc = 0;
+    if (this.mode?.id === 'pubg') {
+      this.zone = {
+        r: zoneRadiusAt(0),
+        t: 0,
+        cx: BR_ZONE.centerX,
+        cz: BR_ZONE.centerZ,
+      };
+      this.getZone?.()?.setRadius(this.zone.r);
+    }
 
     const spawns = (spawnPoints || this.mapData?.spawnPoints || []).map((s, i) => {
       if (s?.clone) return s.clone();
@@ -122,13 +167,14 @@ export class MpMatch {
 
     const players = room?.players || [];
     players.forEach((p, i) => {
-      const spawn = spawns[i % spawns.length].clone();
+      const team = p.team ?? null;
+      const spawn = this._pickSpawn(team);
       const pawn = new NetPawn({
         id: p.id,
         name: p.name || `Player ${i + 1}`,
-        team: p.team ?? null,
+        team,
         spawn,
-        outfitIndex: i % 9,
+        outfitIndex: teamOutfitIndex(team, i % 9),
       });
       if (this.isHost && this.physics && p.id !== this.localId) {
         // Never spawn a second Rapier body for the local host — Player already owns one.
@@ -188,6 +234,10 @@ export class MpMatch {
   dispose() {
     this.avatars?.clear();
     this.pawns.clear();
+    this.ctf = null;
+    this.zone = null;
+    this.matchTime = 0;
+    this._zoneDmgAcc = 0;
     this._pendingSnap = null;
     this._pendingEvents = [];
     this._inputHistory.clear();
@@ -237,31 +287,34 @@ export class MpMatch {
       localPawn.weaponSlot = frame.weaponSlot | 0;
     }
 
-    // Late join: seed any room players missing from pawns
+    // Late join: seed any room players missing from pawns (not BR)
     const roomPlayers = this.session?.room?.players;
-    if (roomPlayers?.length) {
+    if (roomPlayers?.length && this.mode?.allowLateJoin !== false) {
       for (let i = 0; i < roomPlayers.length; i++) {
         const rp = roomPlayers[i];
         if (this.pawns.has(rp.id)) continue;
-        const spawn = this._pickSpawn();
+        const team = rp.team ?? null;
+        const spawn = this._pickSpawn(team);
         const pawn = new NetPawn({
           id: rp.id,
           name: rp.name || `Player ${i + 1}`,
-          team: rp.team ?? null,
+          team,
           spawn,
-          outfitIndex: i % 9,
+          outfitIndex: teamOutfitIndex(team, i % 9),
         });
         if (this.physics && rp.id !== this.localId) pawn.setPhysics(this.physics);
         this.pawns.set(rp.id, pawn);
       }
     }
 
-    // Respawn timers
+    // Respawn timers (Battle Royale: stay dead)
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const allowRespawn = this.mode?.allowRespawn !== false;
     for (const pawn of this.pawns.values()) {
       if (pawn._fireCd > 0) pawn._fireCd = Math.max(0, pawn._fireCd - dt);
+      if (!allowRespawn) continue;
       if (!pawn.alive && pawn.respawnAt > 0 && now >= pawn.respawnAt) {
-        const spawn = this._pickSpawn();
+        const spawn = this._pickSpawn(pawn.team);
         pawn.respawn(spawn);
         this._emitEvent({
           t: NET_MSG.event,
@@ -291,6 +344,10 @@ export class MpMatch {
     // 4. Combat
     this._hostCombat(dt, ctx);
 
+    // 4b. CTF flags after poses/combat so deaths drop the same tick
+    this._hostFlags();
+    this._hostZone(dt);
+
     // 5. Snapshots (include door states + ackSeq via toSnap for guest reconcile)
     this.tick += 1;
     this._snapAcc += dt;
@@ -304,6 +361,11 @@ export class MpMatch {
         serverTime: nowPose,
         players: [...this.pawns.values()].map((p) => p.toSnap()),
         doors: doors?.toNetState?.() || undefined,
+        modeId: this.mode?.id,
+        teamKills: this.mode?.teams ? { ...this.teamKills } : undefined,
+        captures: this.mode?.id === 'ctf' ? { ...this.captures } : undefined,
+        flags: this.ctf ? flagsToNet(this.ctf) : undefined,
+        zone: this.zone ? { ...this.zone } : undefined,
       };
       this.session?.sendGame?.(snap);
     }
@@ -366,6 +428,7 @@ export class MpMatch {
 
       if (killed) {
         attacker.kills += 1;
+        this.mode?.onKill?.(this, attacker);
         this._emitEvent({
           t: NET_MSG.event,
           kind: 'kill',
@@ -373,16 +436,7 @@ export class MpMatch {
           victimId: victim.id,
           headshot: !!hit.headshot,
         });
-
-        if (attacker.kills >= KILL_LIMIT) {
-          this._matchEnded = true;
-          this._emitEvent({
-            t: NET_MSG.event,
-            kind: 'match_end',
-            winnerId: attacker.id,
-            extra: { kills: attacker.kills },
-          });
-        }
+        this._maybeEndMatch(attacker);
       }
     }
   }
@@ -412,8 +466,14 @@ export class MpMatch {
 
     for (const other of this.pawns.values()) {
       if (other.id === attacker.id || !other.alive) continue;
-      // Team modes: no friendly fire when both have a team
-      if (attacker.team && other.team && attacker.team === other.team) continue;
+      if (
+        this.mode?.friendlyFire === false &&
+        attacker.team &&
+        other.team &&
+        attacker.team === other.team
+      ) {
+        continue;
+      }
 
       const rewound = this._poseAt(other.id, rewindAt);
       const eye = rewound
@@ -459,6 +519,84 @@ export class MpMatch {
     }
 
     return best;
+  }
+
+  /** Host-authoritative CTF pickup / drop / return / capture. */
+  _hostFlags() {
+    if (!this.ctf || this._matchEnded) return;
+    const players = [...this.pawns.values()].map((p) => ({
+      id: p.id,
+      team: p.team,
+      x: p.position.x,
+      y: p.position.y,
+      z: p.position.z,
+      alive: !!p.alive,
+    }));
+    const events = stepCtf(this.ctf, players);
+    this.captures = this.ctf.captures;
+    for (const ev of events) {
+      this._emitEvent({
+        t: NET_MSG.event,
+        kind: ev.kind,
+        attackerId: ev.playerId || undefined,
+        extra: {
+          team: ev.team,
+          flagTeam: ev.flagTeam,
+          playerId: ev.playerId,
+        },
+      });
+      if (ev.kind === 'flag_capture') {
+        this._maybeEndMatch(this.pawns.get(ev.playerId));
+      }
+    }
+    this.getFlags?.()?.applyNet?.(flagsToNet(this.ctf));
+  }
+
+  /** Host-authoritative shrinking zone + outside damage (Battle Royale). */
+  _hostZone(dt) {
+    if (this.mode?.id !== 'pubg' || this._matchEnded) return;
+    this.matchTime += dt;
+    const r = zoneRadiusAt(this.matchTime);
+    this.zone = {
+      r,
+      t: this.matchTime,
+      cx: BR_ZONE.centerX,
+      cz: BR_ZONE.centerZ,
+    };
+    this.getZone?.()?.setRadius(r);
+
+    this._zoneDmgAcc += dt;
+    const tick = 0.45;
+    if (this._zoneDmgAcc < tick) return;
+    this._zoneDmgAcc %= tick;
+    const dmg = BR_ZONE.dps * tick;
+    let killedAny = false;
+    for (const pawn of this.pawns.values()) {
+      if (!pawn.alive) continue;
+      if (!isOutsideZone(pawn.position.x, pawn.position.z, r, this.zone.cx, this.zone.cz)) {
+        continue;
+      }
+      const killed = pawn.takeDamage(dmg);
+      this._emitEvent({
+        t: NET_MSG.event,
+        kind: 'hit',
+        attackerId: 'zone',
+        victimId: pawn.id,
+        damage: dmg,
+        extra: { zone: true },
+      });
+      if (killed) {
+        killedAny = true;
+        this._emitEvent({
+          t: NET_MSG.event,
+          kind: 'kill',
+          attackerId: 'zone',
+          victimId: pawn.id,
+          extra: { zone: true },
+        });
+      }
+    }
+    if (killedAny) this._maybeEndMatch(null);
   }
 
   /** @param {NetPawn} pawn @param {number} t */
@@ -515,11 +653,71 @@ export class MpMatch {
     }
   }
 
-  _pickSpawn() {
+  /**
+   * Host win check after a kill (or later: capture / last alive). Uses the active mode module.
+   * @param {NetPawn} [attacker]
+   */
+  _maybeEndMatch(attacker) {
+    if (this._matchEnded) return;
+    const mode = this.mode || getModeById('deathmatch');
+    const pawns = [...this.pawns.values()];
+    const topKills = Math.max(0, attacker?.kills ?? 0, ...pawns.map((p) => p.kills || 0));
+    const alive = pawns.filter((p) => p.alive);
+    const aliveCount = alive.length;
+    const playerCount = pawns.length;
+    const eliminatedCount = Math.max(0, playerCount - aliveCount);
+    const won = mode.checkWin({
+      kills: topKills,
+      teamKills: this.teamKills,
+      captures: this.captures,
+      aliveCount,
+      playerCount,
+      eliminatedCount,
+    });
+    if (!won) return;
+
+    this._matchEnded = true;
+    let winner = attacker;
+    if (mode.id === 'pubg') {
+      if (aliveCount === 1) winner = alive[0];
+      else if (aliveCount === 0) {
+        winner =
+          attacker ||
+          pawns.reduce(
+            (best, p) => (!best || (p.kills || 0) > (best.kills || 0) ? p : best),
+            null
+          );
+      }
+    }
+    const limit = mode.teamScoreLimit || mode.captureLimit || KILL_LIMIT;
+    const scores = mode.id === 'ctf' ? this.captures : this.teamKills;
+    const winnerTeam = mode.teams ? teamReachedLimit(scores, limit) : null;
+    this._emitEvent({
+      t: NET_MSG.event,
+      kind: 'match_end',
+      winnerId: winner?.id,
+      winnerTeam: winnerTeam || undefined,
+      extra: {
+        kills: winner?.kills,
+        teamKills: { ...this.teamKills },
+        captures: { ...this.captures },
+        winnerTeam,
+        modeId: mode.id,
+      },
+    });
+  }
+
+  /**
+   * @param {string|null} [team]
+   * @returns {THREE.Vector3}
+   */
+  _pickSpawn(team = null) {
     const list = this._spawnPoints;
     if (!list.length) return new THREE.Vector3(0, PLAYER_HEIGHT, 8);
-    const i = Math.floor(Math.random() * list.length);
-    return list[i].clone();
+    const picked = this.mode?.teams ? pickTeamSpawn(list, team) : null;
+    const src = picked || list[Math.floor(Math.random() * list.length)];
+    if (src?.clone) return src.clone();
+    return new THREE.Vector3(src?.x ?? 0, src?.y ?? PLAYER_HEIGHT, src?.z ?? 0);
   }
 
   // ─── Guest ──────────────────────────────────────────────────────────
@@ -579,6 +777,33 @@ export class MpMatch {
     this._lastSnapAt =
       typeof performance !== 'undefined' ? performance.now() : Date.now();
 
+    if (msg.teamKills) {
+      this.teamKills = {
+        alpha: msg.teamKills.alpha ?? 0,
+        bravo: msg.teamKills.bravo ?? 0,
+      };
+    }
+    if (msg.captures) {
+      this.captures = {
+        alpha: msg.captures.alpha ?? 0,
+        bravo: msg.captures.bravo ?? 0,
+      };
+      if (this.ctf) this.ctf.captures = this.captures;
+    }
+    if (msg.flags?.length) {
+      if (!this.ctf) this.ctf = createCtfState(this.mapData?.flagHomes);
+      applyFlagsNet(this.ctf, msg.flags);
+      this.getFlags?.()?.applyNet?.(msg.flags);
+    }
+    if (msg.zone) {
+      this.zone = { ...msg.zone };
+      if (typeof msg.zone.t === 'number') this.matchTime = msg.zone.t;
+      if (typeof msg.zone.r === 'number') this.getZone?.()?.setRadius(msg.zone.r);
+    }
+    if (msg.modeId && this.mode?.id !== msg.modeId) {
+      this.mode = getModeById(msg.modeId);
+    }
+
     // Door truth from host (also covered by door events; snapshot heals desync / late join)
     if (msg.doors?.length) {
       this.getDoors?.()?.applyNetState?.(msg.doors);
@@ -606,6 +831,7 @@ export class MpMatch {
       pawn.deaths = snap.deaths;
       pawn.weaponSlot = snap.weapon;
       pawn.aiming = !!snap.aiming;
+      if (snap.team != null) pawn.team = snap.team;
     }
 
     const player = ctx.player || this.getLocalPlayer?.();

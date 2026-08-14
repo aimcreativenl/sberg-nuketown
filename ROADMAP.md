@@ -137,7 +137,7 @@ for v1. Host machine is authoritative (“server owns truth”).
 - [x] Late-join **on** for DM / TDM / CTF; **off** for PUBG once started (roomLogic + tests).
 - [x] Host disconnect policy v1: match ends (`HOST_DISCONNECT_POLICY`, `host_left` → UI).
 - [x] Team seat assign (`alpha`/`bravo`) for TDM/CTF in room state.
-- [ ] Full TDM/CTF/BR gameplay rules in the live match (flags, zone mesh) — Phase 3.
+- [x] Full TDM/CTF/thin-BR gameplay rules in the live match (flags, zone mesh) — Phase 3.
 
 **Exit criteria for 2b/2c scaffolding:** ✓ met (online path + mode pick + policies). Speelbare synced DM blijft 2a remainder + Phase 3 content.
 
@@ -158,13 +158,14 @@ for v1. Host machine is authoritative (“server owns truth”).
 **Goal:** the game modes friends actually want, with lobby mode-select and solid rules.
 
 - [x] Lobby: host picks mode (Deathmatch / TDM / CTF / Battle Royale). *(scaffolding in 2c)*
-- [ ] **Team Deathmatch** — teams, team score, team spawns / friendly-fire policy.
-- [ ] **Capture the Flag** — flags, capture/return, score win.
-- [ ] **Battle Royale (PUBG-style)** — shrinking zone, loot/loadout rules TBD, **no late join**.
-- [ ] Scoreboard / end-screen per mode; bots optional to fill empty slots in MP.
-- [ ] Wire `src/modes/*` into real match flow (not stubs only).
+- [x] **Team Deathmatch** — teams, team score, team spawns / friendly-fire policy.
+- [x] **Capture the Flag** — flags, capture/return, score win.
+- [x] **Battle Royale (thin)** — shrinking zone, last alive, no respawn, **no late join**. Loot/loadout still out of scope.
+- [x] Scoreboard / end-screen per mode.
+- [ ] Bots optional to fill empty slots in MP.
+- [x] Wire `src/modes/*` into real match flow (not stubs only).
 
-**Exit:** at least DM + one team mode playable online; BR rules stubbed or playable MVP.
+**Exit:** at least DM + one team mode playable online; BR rules stubbed or playable MVP. ✓ met (thin BR playable).
 
 ---
 

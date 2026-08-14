@@ -53,6 +53,10 @@ import {
 import { OnlineSession } from '../net/OnlineSession.js';
 import { MpMatch } from '../net/MpMatch.js';
 import { getModeById } from '../modes/registry.js';
+import { flagsToNet } from '../modes/ctf.js';
+import { zoneRadiusAt, isOutsideZone } from '../modes/pubg.js';
+import { FlagManager } from './Flags.js';
+import { ZoneRing } from './Zone.js';
 
 /** Spawn validation is stricter than a single-point overlap check: the player
  * must have several clear escape directions before combat starts. */
@@ -127,6 +131,10 @@ export class Game {
     this._mpNickname = 'Player';
     /** Phase 2c: active match mode (offline PLAY stays deathmatch). */
     this.matchMode = getModeById('deathmatch');
+    /** CTF flag meshes (null unless a CTF network match is live). */
+    this.flags = null;
+    /** BR safe-zone ring (null unless a Battle Royale match is live). */
+    this.zoneRing = null;
 
     this.ui = new GameUI();
     this.audio = new GameAudio();
@@ -156,7 +164,7 @@ export class Game {
     this.donuts = new DonutManager(this.scene, this.audio, this.particles, (pts) => {
       this.player.funPoints += pts;
       this.ui.showPickupToast();
-      this.ui.updateStats(this.player);
+      this.ui.updateStats(this.player, this._hudMatch());
     });
     this.medkits = new MedkitManager(this.scene);
 
@@ -456,8 +464,20 @@ export class Game {
   _bindUI() {
     document.getElementById('btn-play')?.addEventListener('click', () => this.startMatch());
     document.getElementById('btn-resume')?.addEventListener('click', () => this.resume());
-    document.getElementById('btn-restart')?.addEventListener('click', () => this.startMatch());
-    document.getElementById('btn-rematch')?.addEventListener('click', () => this.startMatch());
+    document.getElementById('btn-restart')?.addEventListener('click', () => {
+      if (this.mpMatch || this._mpActive) {
+        this.resume();
+        return;
+      }
+      this.startMatch();
+    });
+    document.getElementById('btn-rematch')?.addEventListener('click', () => {
+      if (this.mpMatch || this._mpActive) {
+        this.cancelMultiplayer();
+        return;
+      }
+      this.startMatch();
+    });
     document.getElementById('btn-host')?.addEventListener('click', () => this.hostMultiplayer());
     document.getElementById('btn-search')?.addEventListener('click', () => this.openJoinPanel());
     document.getElementById('btn-join-go')?.addEventListener('click', () => this.joinMultiplayer());
@@ -530,7 +550,7 @@ export class Game {
         e.preventDefault();
         if (!this._tabScoreboard) {
           this._tabScoreboard = true;
-          this.ui.showMiniScoreboard(this._scoreboardEntries(), true);
+          this.ui.showMiniScoreboard(this._scoreboardEntries(), true, this._hudMatch());
         }
       }
     });
@@ -548,11 +568,27 @@ export class Game {
       this.mpMatch?.dispose();
     } catch (_) {}
     this.mpMatch = null;
+    this._disposeFlags();
+    this._disposeZone();
     try {
       this.mp?.disconnect();
     } catch (_) {}
     this.mp = null;
     this.lan = null;
+  }
+
+  _disposeFlags() {
+    try {
+      this.flags?.dispose();
+    } catch (_) {}
+    this.flags = null;
+  }
+
+  _disposeZone() {
+    try {
+      this.zoneRing?.dispose();
+    } catch (_) {}
+    this.zoneRing = null;
   }
 
   /** Phase 2b: lobby signaling + WebRTC datachannel to host. */
@@ -627,7 +663,10 @@ export class Game {
     if (msg.kind === 'kill') {
       const killer = this.mpMatch?.pawns?.get(msg.attackerId);
       const victim = this.mpMatch?.pawns?.get(msg.victimId);
-      const killerName = killer?.name || (msg.attackerId === localId ? 'YOU' : 'Player');
+      const zoneKill = msg.attackerId === 'zone' || !!msg.extra?.zone;
+      const killerName = zoneKill
+        ? 'THE ZONE'
+        : killer?.name || (msg.attackerId === localId ? 'YOU' : 'Player');
       const victimName = victim?.name || (msg.victimId === localId ? 'YOU' : 'Player');
       this.ui.addKillFeed?.(
         killerName,
@@ -638,8 +677,9 @@ export class Game {
       );
       if (msg.victimId === localId) {
         this.player.alive = false;
-        this.respawnTimer = 3;
-        this.ui.showDeath?.(killerName, this.respawnTimer);
+        const eliminated = this.matchMode?.allowRespawn === false;
+        this.respawnTimer = eliminated ? 0 : 3;
+        this.ui.showDeath?.(killerName, this.respawnTimer, { eliminated });
         document.exitPointerLock?.();
         this.audio.playDeath?.();
       }
@@ -679,9 +719,33 @@ export class Game {
       return;
     }
 
+    if (msg.kind === 'flag_pickup' || msg.kind === 'flag_drop' || msg.kind === 'flag_return' || msg.kind === 'flag_capture') {
+      const pid = msg.attackerId || msg.extra?.playerId;
+      const pawn = this.mpMatch?.pawns?.get(pid);
+      const name = pid === localId ? 'YOU' : pawn?.name || 'Player';
+      const team = String(msg.extra?.team || '').toUpperCase();
+      if (msg.kind === 'flag_capture') {
+        this.ui.showMatchCallout('CAPTURE!', { fight: true });
+        this._fightHideTimer = 1.15;
+        this.ui.addStatusFeed?.(`${name} captured for ${team}`);
+        this.audio.playKill?.();
+      } else if (msg.kind === 'flag_pickup') {
+        this.ui.addStatusFeed?.(`${name} took the ${team} flag`);
+        this.audio.playDonutPickup?.();
+      } else if (msg.kind === 'flag_return') {
+        this.ui.addStatusFeed?.(`${name} returned the ${team} flag`);
+        this.audio.playHit?.();
+      }
+      return;
+    }
+
     if (msg.kind === 'match_end') {
-      const won = msg.winnerId === localId;
-      this._endMatch(won);
+      const extra = msg.extra || {};
+      const localPawn = this.mpMatch?.pawns?.get(localId);
+      const won = extra.winnerTeam
+        ? localPawn?.team === extra.winnerTeam
+        : msg.winnerId === localId;
+      this._endMatch(won, extra);
     }
   }
 
@@ -876,6 +940,8 @@ export class Game {
     this.donuts.clear();
     this.medkits.spawnDefault();
     this.bots.clear();
+    this._disposeFlags();
+    this._disposeZone();
 
     try {
       this.mpMatch?.dispose();
@@ -894,10 +960,24 @@ export class Game {
       getLocalPlayer: () => this.player,
       getWeapons: () => this.weapons,
       getDoors: () => this.doors,
+      getFlags: () => this.flags,
+      getZone: () => this.zoneRing,
       onEvent: (ev) => this._onMpEvent(ev),
+      mode: this.matchMode,
     });
     this.mpMatch.attachScene(this.scene);
+    if (this.matchMode?.id === 'pubg') {
+      this.zoneRing = new ZoneRing(this.scene);
+    }
     this.mpMatch.begin(this.lan?.room || { players: [] }, this.mapData?.spawnPoints);
+    if (this.matchMode?.id === 'ctf') {
+      this.flags = new FlagManager(this.scene);
+      this.flags.spawn(this.mapData?.flagHomes);
+      if (this.mpMatch.ctf) this.flags.applyNet(flagsToNet(this.mpMatch.ctf));
+    }
+    if (this.zoneRing) {
+      this.zoneRing.setRadius(this.mpMatch.zone?.r ?? zoneRadiusAt(0));
+    }
 
     const localPawn = this.mpMatch.pawns.get(localId);
     const spawn = localPawn
@@ -913,7 +993,7 @@ export class Game {
     this.ui.hideDeath();
     this.ui.showPause(false);
     this.ui.showHUD();
-    this.ui.updateStats(this.player);
+    this.ui.updateStats(this.player, this._hudMatch());
     this.ui.updateWeapon(this.weapons.getCurrent(), this.weapons.slot, this.weapons.getAmmo());
     this._updateScopeUI();
     document.getElementById('interact-prompt')?.classList.add('hidden');
@@ -1003,6 +1083,8 @@ export class Game {
     this.donuts.clear();
     this.medkits.spawnDefault();
     this.bots.spawnAll(BOT_COUNT);
+    this._disposeFlags();
+    this._disposeZone();
 
     const spawn = this._playerSpawn();
     this.player.fullMatchReset(spawn);
@@ -1011,7 +1093,7 @@ export class Game {
     this.ui.hideDeath();
     this.ui.showPause(false);
     this.ui.showHUD();
-    this.ui.updateStats(this.player);
+    this.ui.updateStats(this.player, this._hudMatch());
     this.ui.updateWeapon(this.weapons.getCurrent(), this.weapons.slot, this.weapons.getAmmo());
     this._updateScopeUI();
     document.getElementById('interact-prompt')?.classList.add('hidden');
@@ -1216,7 +1298,9 @@ export class Game {
       }
     } else if (!this.player.alive && this.mpMatch) {
       this.respawnTimer = Math.max(0, this.respawnTimer - dt);
-      this.ui.updateDeathTimer(Math.max(0, this.respawnTimer));
+      this.ui.updateDeathTimer(Math.max(0, this.respawnTimer), {
+        eliminated: this.matchMode?.allowRespawn === false,
+      });
     }
 
     // Scope sensitivity uses last frame's aim state (ADS hold or optic)
@@ -1359,15 +1443,46 @@ export class Game {
     this.donuts.donuts = this.donuts.donuts.filter((x) => x.alive);
 
     this.particles.update(dt);
-    this.ui.updateStats(this.player);
+    this.flags?.update(dt);
+    this.zoneRing?.update(dt);
+    this.ui.updateStats(this.player, this._hudMatch());
+    this.ui.setFlagCarry?.(this._localCarryingFlag());
 
     // Refresh Tab scoreboard while held
     if (this._tabScoreboard) {
-      this.ui.showMiniScoreboard(this._scoreboardEntries(), true);
+      this.ui.showMiniScoreboard(this._scoreboardEntries(), true, this._hudMatch());
     }
 
     // Check win conditions
     this._checkMatchEnd();
+  }
+
+  _localCarryingFlag() {
+    const ctf = this.mpMatch?.ctf;
+    const localId = this.mp?.playerId;
+    if (!ctf?.flags || !localId) return false;
+    return Object.values(ctf.flags).some(
+      (f) => f.state === 'carried' && f.carrierId === localId
+    );
+  }
+
+  _hudMatch() {
+    const mode = this.matchMode || getModeById('deathmatch');
+    const mp = this.mpMatch;
+    const localId = this.mp?.playerId;
+    const localPawn = localId && mp?.pawns ? mp.pawns.get(localId) : null;
+    return {
+      modeId: mode.id,
+      modeName: mode.name,
+      teamKills: mode.id === 'tdm' ? mp?.teamKills || { alpha: 0, bravo: 0 } : null,
+      captures: mode.id === 'ctf' ? mp?.captures || { alpha: 0, bravo: 0 } : null,
+      localTeam: localPawn?.team || null,
+      carrying: this._localCarryingFlag(),
+      goalLimit: mode.captureLimit || mode.teamScoreLimit || mode.killLimit || 20,
+      aliveCount: mp?.pawns
+        ? [...mp.pawns.values()].filter((p) => p.alive).length
+        : 0,
+    };
   }
 
   _scoreboardEntries() {
@@ -1381,7 +1496,15 @@ export class Game {
         isPlayer: p.id === localId,
         team: p.team || undefined,
       }));
-      entries.sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name));
+      const teamMode = !!this.matchMode?.teams;
+      entries.sort((a, b) => {
+        if (teamMode) {
+          const ta = a.team === 'alpha' ? 0 : a.team === 'bravo' ? 1 : 2;
+          const tb = b.team === 'alpha' ? 0 : b.team === 'bravo' ? 1 : 2;
+          if (ta !== tb) return ta - tb;
+        }
+        return b.kills - a.kills || a.name.localeCompare(b.name);
+      });
       return entries;
     }
     const entries = [
@@ -1550,7 +1673,7 @@ export class Game {
     this.player.kills += 1;
     this.player.killStreak += 1;
     // Kill feed + donut are guaranteed in _onBotDeath (single source of truth)
-    this.ui.updateStats(this.player);
+    this.ui.updateStats(this.player, this._hudMatch());
     // Loadout stays manual: 1 = Pistol, 2 = M16 (no auto-swap on kill)
 
     // Kill juice: flash, confirm, sting, confetti burst at death pos
@@ -1615,7 +1738,7 @@ export class Game {
     const killed = this.player.takeDamage(dmg);
     this.particles.bloodPuff(hit.point);
     this.audio.playHurt?.();
-    this.ui.updateStats(this.player);
+    this.ui.updateStats(this.player, this._hudMatch());
     // Screen hurt flash
     const app = document.getElementById('app');
     if (app) {
@@ -1666,16 +1789,20 @@ export class Game {
     // TDM / CTF / PUBG: multiplayer-oriented; offline PLAY stays deathmatch
   }
 
-  _endMatch(playerWon) {
+  _endMatch(playerWon, extra = {}) {
     this.matchOver = true;
     this.running = false;
     this.matchFlow = endMatch(this.matchFlow || createMatchFlow());
     this.ui.hideMatchCallout?.();
     this._tabScoreboard = false;
     this.ui.showMiniScoreboard(null, false);
+    this.ui.setFlagCarry?.(false);
     document.exitPointerLock?.();
 
-    this.ui.showVictory(this._scoreboardEntries(), playerWon);
+    this.ui.showVictory(this._scoreboardEntries(), playerWon, {
+      ...this._hudMatch(),
+      ...extra,
+    });
     this.audio.playKillStreak(10);
   }
 
@@ -1725,6 +1852,28 @@ export class Game {
       return;
     }
 
+    const promptEl = prompt;
+    const localId = this.mp?.playerId;
+    const localPawn = localId ? this.mpMatch?.pawns?.get(localId) : null;
+    const ctf = this.mpMatch?.ctf;
+    if (ctf && localPawn?.team) {
+      if (this._localCarryingFlag()) {
+        if (promptEl) {
+          promptEl.textContent = 'Take the flag home!';
+          promptEl.classList.remove('hidden');
+        }
+        return;
+      }
+      const hint = this.flags?.promptFor(this.player.position, localPawn.team, ctf);
+      if (hint && hint !== 'Home base') {
+        if (promptEl) {
+          promptEl.textContent = hint;
+          promptEl.classList.remove('hidden');
+        }
+        return;
+      }
+    }
+
     const near = this.medkits.getNearby(this.player.position);
     if (near) {
       if (prompt) {
@@ -1736,7 +1885,7 @@ export class Game {
           this.player.health = this.player.maxHealth;
           this.player.timeSinceDamage = 99;
           this.audio.playDonutPickup?.();
-          this.ui.updateStats(this.player);
+          this.ui.updateStats(this.player, this._hudMatch());
           const toast = document.getElementById('pickup-toast');
           if (toast) {
             toast.textContent = 'MEDKIT + FULL HP ❤️';
@@ -1753,6 +1902,25 @@ export class Game {
         if (healed) prompt?.classList.add('hidden');
       }
       return;
+    }
+
+    const zone = this.mpMatch?.zone;
+    if (this.matchMode?.id === 'pubg' && zone) {
+      if (
+        isOutsideZone(
+          this.player.position.x,
+          this.player.position.z,
+          zone.r,
+          zone.cx ?? 0,
+          zone.cz ?? 0
+        )
+      ) {
+        if (prompt) {
+          prompt.textContent = 'Get inside the zone!';
+          prompt.classList.remove('hidden');
+        }
+        return;
+      }
     }
 
     prompt?.classList.add('hidden');

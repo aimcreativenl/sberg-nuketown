@@ -24,7 +24,7 @@ export const ROOM_MODES = {
   deathmatch: { id: 'deathmatch', label: 'Deathmatch', allowLateJoin: true },
   tdm: { id: 'tdm', label: 'Team Deathmatch', allowLateJoin: true },
   ctf: { id: 'ctf', label: 'Capture the Flag', allowLateJoin: true },
-  pubg: { id: 'pubg', label: 'Battle Royale', allowLateJoin: false },
+  pubg: { id: 'pubg', label: 'Battle Royale', allowLateJoin: false, minPlayers: 2 },
 };
 
 const TEAM_MODES = new Set(['tdm', 'ctf']);
@@ -208,6 +208,10 @@ export function hostStartMatch(room, hostId, seconds = 10) {
   if (!room) return { ok: false, error: 'Room not found' };
   if (room.hostId !== hostId) return { ok: false, error: 'Only the host can start' };
   if (room.phase !== ROOM_PHASE.lobby) return { ok: false, error: 'Already started' };
+  const min = ROOM_MODES[room.modeId]?.minPlayers || 1;
+  if (room.players.length < min) {
+    return { ok: false, error: `Need at least ${min} players for this mode` };
+  }
   room.phase = ROOM_PHASE.countdown;
   room.countdown = Math.max(1, seconds);
   return { ok: true, room };

@@ -13,7 +13,12 @@ import { sampleInputFrame, emptyInputFrame } from '../src/net/sampleInput.js';
 import { NetPawn } from '../src/net/NetPawn.js';
 import { InputHistory, residualError } from '../src/net/InputHistory.js';
 import { PoseHistory, clampRewindMs } from '../src/net/PoseHistory.js';
-import { PLAYER_HEIGHT } from '../src/game/constants.js';
+import { PLAYER_HEIGHT, PLAYER_MAX_HP, KILL_LIMIT } from '../src/game/constants.js';
+import { MpMatch } from '../src/net/MpMatch.js';
+import { MODE_TDM } from '../src/modes/tdm.js';
+import { MODE_CTF, FLAG_HOMES, FLAG_STATE } from '../src/modes/ctf.js';
+import { MODE_PUBG, BR_ZONE } from '../src/modes/pubg.js';
+import { getModeById } from '../src/modes/registry.js';
 
 const failures = [];
 function assert(cond, msg) {
@@ -179,6 +184,194 @@ assert(INPUT_HZ === 30, `INPUT_HZ === 30 (got ${INPUT_HZ})`);
   assert(mid && Math.abs(mid.x - 5) < 1e-6, `PoseHistory.sampleAt mid x≈5 got ${mid?.x}`);
 }
 
+function makeMatch(mode, players) {
+  const sent = [];
+  const match = new MpMatch({
+    session: { sendGame(msg) { sent.push(msg); } },
+    isHost: true,
+    localId: 'host',
+    mode,
+  });
+  match.begin(
+    { players },
+    [new THREE.Vector3(-10, PLAYER_HEIGHT, 0), new THREE.Vector3(10, PLAYER_HEIGHT, 0)]
+  );
+  match._sent = sent;
+  return match;
+}
+
+// ─── Phase 3: TDM team score / win / friendly fire ─────────────────────
+{
+  const match = makeMatch(MODE_TDM, [
+    { id: 'a', name: 'Ada', team: 'alpha' },
+    { id: 'b', name: 'Bob', team: 'bravo' },
+  ]);
+  assert(match.pawns.get('a').position.x <= 0, 'tdm alpha spawn −X');
+  assert(match.pawns.get('b').position.x > 0, 'tdm bravo spawn +X');
+  assert(match.pawns.get('a').outfitIndex === 3, 'tdm alpha outfit');
+  assert(match.pawns.get('b').outfitIndex === 4, 'tdm bravo outfit');
+
+  const ada = match.pawns.get('a');
+  ada.kills = 20;
+  match.teamKills = { alpha: 5, bravo: 3 };
+  match._maybeEndMatch(ada);
+  assert(!match._matchEnded, 'tdm does not end on personal 20 kills');
+
+  match.teamKills.alpha = 19;
+  MODE_TDM.onKill(match, ada);
+  assert(match.teamKills.alpha === 20, 'tdm onKill increments teamKills');
+  match._maybeEndMatch(ada);
+  assert(match._matchEnded, 'tdm ends at team score limit');
+  const endEv = match._pendingEvents.find((e) => e.kind === 'match_end');
+  assert(endEv?.extra?.winnerTeam === 'alpha', 'tdm match_end winnerTeam alpha');
+}
+
+{
+  const dm = makeMatch(getModeById('deathmatch'), [
+    { id: 'a', name: 'Ada' },
+    { id: 'b', name: 'Bob' },
+  ]);
+  const ada = dm.pawns.get('a');
+  ada.kills = KILL_LIMIT;
+  dm._maybeEndMatch(ada);
+  assert(dm._matchEnded, 'deathmatch still ends on personal kill limit');
+}
+
+{
+  const match = makeMatch(MODE_TDM, [
+    { id: 'a', name: 'Ada', team: 'alpha' },
+    { id: 'b', name: 'Bob', team: 'alpha' },
+  ]);
+  const a = match.pawns.get('a');
+  const b = match.pawns.get('b');
+  a.position.set(0, PLAYER_HEIGHT, 0);
+  b.position.set(0, PLAYER_HEIGHT, -2);
+  a.yaw = 0;
+  a.pitch = 0;
+  a.lastInput = { fire: true, seq: 1 };
+  a._fireCd = 0;
+  const hp = b.health;
+  match._hostCombat(0.016, { shotBlocked: () => false });
+  assert(b.health === hp, 'tdm friendly fire off');
+  assert(match.teamKills.alpha === 0, 'tdm FF shot does not score');
+}
+
+{
+  const match = makeMatch(MODE_TDM, [
+    { id: 'a', name: 'Ada', team: 'alpha' },
+    { id: 'b', name: 'Bob', team: 'bravo' },
+  ]);
+  const a = match.pawns.get('a');
+  const b = match.pawns.get('b');
+  a.position.set(0, PLAYER_HEIGHT, 0);
+  b.position.set(0, PLAYER_HEIGHT, -2);
+  a.yaw = 0;
+  a.pitch = 0;
+  a.lastInput = { fire: true, seq: 1 };
+  a._fireCd = 0;
+  match._hostCombat(0.016, { shotBlocked: () => false });
+  assert(b.health < PLAYER_MAX_HP, `tdm enemy shot deals damage (hp=${b.health})`);
+  assert(match.teamKills.alpha >= 1 || !b.alive || b.health < PLAYER_MAX_HP, 'tdm combat scored or damaged');
+}
+
+{
+  const match = makeMatch(MODE_CTF, [
+    { id: 'a', name: 'Ada', team: 'alpha' },
+    { id: 'b', name: 'Bob', team: 'bravo' },
+  ]);
+  assert(!!match.ctf, 'ctf state on begin');
+  const bob = match.pawns.get('b');
+  bob.position.set(FLAG_HOMES.alpha.x, PLAYER_HEIGHT, FLAG_HOMES.alpha.z);
+  match._hostFlags();
+  assert(match.ctf.flags.alpha.state === FLAG_STATE.carried, 'mp ctf pickup');
+  assert(match.ctf.flags.alpha.carrierId === 'b', 'mp ctf carrier');
+  bob.position.set(FLAG_HOMES.bravo.x, PLAYER_HEIGHT, FLAG_HOMES.bravo.z);
+  match._hostFlags();
+  assert(match.captures.bravo === 1, 'mp ctf capture scores');
+  assert(match.ctf.flags.alpha.state === FLAG_STATE.home, 'mp ctf flag reset');
+  match.captures.bravo = 2;
+  bob.position.set(FLAG_HOMES.alpha.x, PLAYER_HEIGHT, FLAG_HOMES.alpha.z);
+  match._hostFlags();
+  bob.position.set(FLAG_HOMES.bravo.x, PLAYER_HEIGHT, FLAG_HOMES.bravo.z);
+  match._hostFlags();
+  assert(match.captures.bravo === 3 && match._matchEnded, 'mp ctf win at 3');
+  const capEnd = match._pendingEvents.find((e) => e.kind === 'match_end');
+  assert(capEnd?.extra?.winnerTeam === 'bravo', 'mp ctf winnerTeam bravo');
+}
+
+{
+  const match = makeMatch(MODE_CTF, [
+    { id: 'a', name: 'Ada', team: 'alpha' },
+    { id: 'b', name: 'Bob', team: 'bravo' },
+  ]);
+  const bob = match.pawns.get('b');
+  bob.position.set(FLAG_HOMES.alpha.x, PLAYER_HEIGHT, FLAG_HOMES.alpha.z);
+  match._hostFlags();
+  bob.alive = false;
+  match._hostFlags();
+  assert(match.ctf.flags.alpha.state === FLAG_STATE.dropped, 'mp ctf drop on death');
+}
+
+// ─── Phase 3: Battle Royale last alive / no respawn / zone ─────────────
+{
+  const solo = makeMatch(MODE_PUBG, [{ id: 'a', name: 'Ada' }]);
+  assert(solo.zone && solo.zone.r === BR_ZONE.stages[0].r, 'br zone on begin');
+  solo._maybeEndMatch(null);
+  assert(!solo._matchEnded, 'br 1-pawn match does not auto-end');
+}
+
+{
+  const match = makeMatch(MODE_PUBG, [
+    { id: 'a', name: 'Ada' },
+    { id: 'b', name: 'Bob' },
+  ]);
+  const a = match.pawns.get('a');
+  const b = match.pawns.get('b');
+  a.alive = false;
+  a.respawnAt = 1;
+  match._updateHost(0.05, {});
+  assert(!a.alive, 'br no respawn');
+
+  match.session.room = {
+    players: [
+      { id: 'a', name: 'Ada' },
+      { id: 'b', name: 'Bob' },
+      { id: 'c', name: 'Cara' },
+    ],
+  };
+  match._updateHost(0.016, {});
+  assert(!match.pawns.has('c'), 'br no late-join pawn');
+
+  match._maybeEndMatch(null);
+  assert(match._matchEnded, 'br last alive wins');
+  const endEv = match._pendingEvents.find((e) => e.kind === 'match_end');
+  assert(endEv?.winnerId === 'b', 'br winner is last alive not the killer');
+}
+
+{
+  const match = makeMatch(MODE_PUBG, [
+    { id: 'a', name: 'Ada' },
+    { id: 'b', name: 'Bob' },
+  ]);
+  const a = match.pawns.get('a');
+  const b = match.pawns.get('b');
+  a.position.set(80, PLAYER_HEIGHT, 0);
+  b.position.set(0, PLAYER_HEIGHT, 0);
+  const hpA = a.health;
+  const hpB = b.health;
+  match._hostZone(0.5);
+  assert(a.health < hpA, `zone damages outsider (hp=${a.health})`);
+  assert(b.health === hpB, 'zone spares insider');
+  a.health = 4;
+  a.alive = true;
+  match._zoneDmgAcc = 0.45;
+  match._hostZone(0.02);
+  assert(!a.alive, 'zone can eliminate');
+  assert(match._matchEnded, 'zone elim ends match when last alive remains');
+  const endEv = match._pendingEvents.find((e) => e.kind === 'match_end');
+  assert(endEv?.winnerId === 'b', 'zone kill credits last alive');
+}
+
 // ─── Report ────────────────────────────────────────────────────────────
 if (failures.length) {
   console.error('check-mp-sync FAILED:');
@@ -194,4 +387,7 @@ console.log(`check-mp-sync OK (${[
   'toSnap',
   'InputHistory',
   'PoseHistory',
+  'TDM',
+  'CTF',
+  'BR',
 ].join(', ')})`);

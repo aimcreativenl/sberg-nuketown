@@ -4,12 +4,12 @@
 
 | | |
 |--|--|
-| **Laatst bijgewerkt** | 2026-08-09 |
-| **Current checkpoint** | Current branch tip; functional spawn fix `86e1cac` |
+| **Laatst bijgewerkt** | 2026-08-14 |
+| **Current checkpoint** | `main` — Phase 3 online TDM / CTF / thin BR + spawn/weapon polish |
 | **Local game** | http://127.0.0.1:5175/ |
 | **Progress dashboard** | http://127.0.0.1:8766/ |
-| **HEAD (typisch)** | Current branch tip — spawn verification docs/captures (check `git log -1`) |
-| **Branch** | `codex/fix-player-spawn` |
+| **HEAD (typisch)** | Check `git log -1` after the live push |
+| **Branch** | `main` |
 | **Repo** | https://github.com/aimcreativenl/sberg-nuketown |
 | **Game (live)** | https://sberg-nuketown.vercel.app/ |
 | **Signal hub** | https://sbarg-nuketown-hub.onrender.com (`/health`, `/mp`) |
@@ -44,20 +44,28 @@ Pastel voxel FPS (Nuketown-achtig): **offline PLAY vs 9 bots**, of **online list
 | 1 Rapier (1a–1d) | DONE | Player + bots; legacy AABB blijft voor unit tests |
 | 2a Lobby + combat sync | DONE | `MpMatch`, snapshots, remotes |
 | 2b Online / NAT | DONE | WebRTC + STUN; TURN nog optioneel |
-| 2c Modes scaffolding | DONE | Mode pick + late-join policy; **geen** echte CTF/BR content |
+| 2c Modes scaffolding | DONE | Mode pick + late-join policy |
 | **4a Net polish MVP** | **DONE** | Reconcile, remote interp, lag-comp |
 | 4b Reconnect / host migration / anti-cheat | OPEN | Bewust niet in 4a |
-| **3 Modes content** | **OPEN** | Volgende grote feature-track |
+| **3 Modes content** | **DONE (thin)** | Online TDM + CTF + last-alive BR; geen BR-loot, geen MP-bots-fill |
 | 5 Maps / 6 Ship | OPEN | |
 | **Spawn safety / WASD start** | **DONE** | `86e1cac`; ground-level, escapable, bot-separated spawn selection |
 
-**Aanbevolen next:** online DM playtesten → daarna **Phase 3** (TDM/CTF/BR speelbaar) óf **Phase 4b** (reconnect) als disconnects pijn doen.
+**Aanbevolen next:** live playtesten (Host + Join, TDM/CTF/BR) → daarna **Phase 4b** (reconnect) of **Phase 5** (tweede map).
 
 ---
 
-## 3. Sessie-log — wat recent is gedaan (2026-08-09; historical entries retained)
+## 3. Sessie-log — wat recent is gedaan (2026-08-14; historical entries retained)
 
 Gebruik dit als “wat al gefixt is, niet opnieuw onderzoeken”.
+
+### 3.00 Phase 3 online modes + live push (2026-08-14)
+- Online **TDM**: team score to 20, no friendly fire, house-side spawns, TEAM HUD.
+- Online **CTF**: 3 captures, host-authoritative pickup/drop/return/capture, own flag must be home, pastel poles + CAPS HUD.
+- Online **thin BR**: last alive, no respawn, min 2 players, shrinking zone + outside DPS, ALIVE HUD. No loot/loadout.
+- Offline **PLAY** stays deathmatch vs 9 bots.
+- Tests: `test:modes`, `test:lan-room`, `test:mp-sync`, `test:phase-d-hud`, `build` green.
+- This push also lands spawn-escape + weapon/bot polish that lived on `codex/fix-player-spawn`.
 
 ### 3.0 Spawn on blocks / no WASD escape (2026-08-09)
 - Root cause: direct overlap filtering was insufficient; several free authored points were surrounded by colliders, and one placed the player beside a bot.
@@ -160,13 +168,13 @@ Live deploy: push naar `main` → Vercel + Render volgen de repo.
 
 ## 8. Volgende sessie — concrete startprompts
 
-Spawn/WASD-start is opgelost in `86e1cac`; gebruik voor playtests de lokale link `http://127.0.0.1:5175/` en voor voortgang `http://127.0.0.1:8766/`. Een volgende technische check kan optioneel directe BotManager/Rapier-locomotion coverage toevoegen; daarna zijn Phase 3/4b de geplande tracks.
+Phase 3 thin modes staan op `main` (TDM / CTF / last-alive BR). Offline PLAY is ongewijzigd deathmatch. Hard-refresh de live URL na deploy.
 
-**Playtest / bugs:** “Online DM voelt nog X — fix in MpMatch/RemoteAvatars.”
-
-**Phase 3:** “Implementeer speelbare TDM of CTF (flags/score/HUD) op bestaande mode registry + MpMatch.”
+**Playtest / bugs:** “Online TDM/CTF/BR voelt nog X — fix in MpMatch / mode module.”
 
 **Phase 4b:** “Mid-match reconnect + rejoin waar late-join mag; host_left blijft end_match tenzij migration.”
+
+**Phase 5:** “Tweede pastel map, zelfde collision/net contract.”
 
 ---
 

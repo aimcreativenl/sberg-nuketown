@@ -51,5 +51,5 @@ Multiplayer networking (client ↔ authoritative **listen-server** / host).
 | `NetTypes.js` | wire types + Phase 4 constants |
 | `server/lanRoom.js` | Node hub + signal relay |
 
-**Done for Phase 2a–2c scaffolding + Phase 4a net polish.**  
-Next: Phase 3 mode content, or Phase 4b reconnect — see [`CONTINUITY.md`](../../CONTINUITY.md).
+**Done for Phase 2a–2c scaffolding, Phase 3 thin modes (TDM/CTF/BR), and Phase 4a net polish.**  
+Next: merge/deploy, or Phase 4b reconnect — see [`CONTINUITY.md`](../../CONTINUITY.md).

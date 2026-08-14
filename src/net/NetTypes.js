@@ -79,18 +79,24 @@ export const RECONCILE_SOFT_XZ = 0.35;
  * @property {PlayerSnap[]} players
  * @property {Array<{ id: string, open: boolean }>} [doors]
  * @property {number} [serverTime] - Host performance.now() when snap built (lag-comp / interp).
+ * @property {string} [modeId]
+ * @property {{ alpha?: number, bravo?: number }} [teamKills]
+ * @property {{ alpha?: number, bravo?: number }} [captures]
+ * @property {Array<{ team: string, state: string, carrierId?: string|null, x: number, y: number, z: number }>} [flags]
+ * @property {{ r: number, t?: number, cx?: number, cz?: number }} [zone]
  */
 
 /**
  * Host → all: discrete combat / match event.
  * @typedef {Object} EventMsg
  * @property {'event'} t
- * @property {'hit'|'kill'|'respawn'|'match_end'|'door'} kind
+ * @property {'hit'|'kill'|'respawn'|'match_end'|'door'|'flag_pickup'|'flag_drop'|'flag_return'|'flag_capture'} kind
  * @property {string} [attackerId]
  * @property {string} [victimId]
  * @property {number} [damage]
  * @property {boolean} [headshot]
  * @property {string} [winnerId]
+ * @property {string} [winnerTeam]
  * @property {string} [doorId]
  * @property {boolean} [open]
  * @property {object} [extra]

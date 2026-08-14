@@ -10,6 +10,7 @@ export class GameUI {
       hud: el('hud'),
       kills: el('stat-kills'),
       goal: el('stat-goal'),
+      goalLabel: el('stat-goal-label'),
       kd: el('stat-kd'),
       fun: el('stat-fun'),
       killFeed: el('kill-feed'),
@@ -26,6 +27,7 @@ export class GameUI {
       streak: el('streak-callout'),
       pickup: el('pickup-toast'),
       death: el('death-overlay'),
+      deathTitle: el('death-title'),
       deathBy: el('death-by'),
       deathTimer: el('death-timer'),
       pause: el('pause-overlay'),
@@ -35,6 +37,8 @@ export class GameUI {
       scoreboard: el('scoreboard'),
       miniScoreboard: el('mini-scoreboard'),
       miniScoreboardBody: el('mini-scoreboard-body'),
+      miniScoreboardTitle: el('mini-sb-title'),
+      flagCarry: el('flag-carry'),
       matchCallout: el('match-callout'),
       join: el('join-screen'),
       lobby: el('lobby-screen'),
@@ -170,6 +174,7 @@ export class GameUI {
         const teamTag = p.team ? ` [${p.team}]` : '';
         li.textContent = p.isHost ? `${p.name} (host)${teamTag}` : `${p.name}${teamTag}`;
         if (p.isHost) li.classList.add('is-host');
+        if (p.team === 'alpha' || p.team === 'bravo') li.classList.add(`team-${p.team}`);
         list.appendChild(li);
       }
     }
@@ -232,9 +237,37 @@ export class GameUI {
     this._calloutKey = null;
   }
 
-  updateStats(player) {
+  /**
+   * @param {object} player
+   * @param {{ modeId?: string, teamKills?: { alpha?: number, bravo?: number }|null, goalLimit?: number }} [match]
+   */
+  updateStats(player, match = {}) {
     this.els.kills.textContent = String(player.kills);
-    if (this.els.goal) this.els.goal.textContent = `${player.kills}/${KILL_LIMIT}`;
+    const modeId = match.modeId || 'deathmatch';
+    const teamKills = match.teamKills;
+    const captures = match.captures;
+    const limit = match.goalLimit || KILL_LIMIT;
+    if (this.els.goalLabel) {
+      this.els.goalLabel.textContent =
+        modeId === 'pubg'
+          ? 'ALIVE'
+          : modeId === 'ctf' && captures
+            ? 'CAPS'
+            : modeId === 'tdm' && teamKills
+              ? 'TEAM'
+              : 'GOAL';
+    }
+    if (this.els.goal) {
+      if (modeId === 'pubg') {
+        this.els.goal.textContent = String(match.aliveCount ?? 0);
+      } else if (modeId === 'ctf' && captures) {
+        this.els.goal.textContent = `${captures.alpha ?? 0}–${captures.bravo ?? 0}`;
+      } else if (modeId === 'tdm' && teamKills) {
+        this.els.goal.textContent = `${teamKills.alpha ?? 0}–${teamKills.bravo ?? 0}`;
+      } else {
+        this.els.goal.textContent = `${player.kills}/${limit}`;
+      }
+    }
     this.els.kd.textContent = player.kd;
     this.els.fun.textContent = String(player.funPoints);
     const pct = Math.max(0, (player.health / player.maxHealth) * 100);
@@ -344,6 +377,23 @@ export class GameUI {
     }, 700);
   }
 
+  addStatusFeed(text) {
+    const root = this.els.killFeed;
+    if (!root || typeof document === 'undefined' || !text) return;
+    const el = document.createElement('div');
+    el.className = 'kill-entry ctf';
+    el.textContent = String(text);
+    root.prepend(el);
+    while (root.children.length > 6) {
+      root.lastChild.remove();
+    }
+    setTimeout(() => el.remove(), 5000);
+  }
+
+  setFlagCarry(on) {
+    this.els.flagCarry?.classList.toggle('hidden', !on);
+  }
+
   addKillFeed(killer, victim, weaponId, isYouKiller, isYouVictim) {
     const icon = GUN_ICONS[weaponId] || '·';
     const el = document.createElement('div');
@@ -413,13 +463,24 @@ export class GameUI {
     }, 1400);
   }
 
-  showDeath(killerName, seconds) {
+  showDeath(killerName, seconds, opts = {}) {
     this.els.death.classList.remove('hidden');
+    if (this.els.deathTitle) {
+      this.els.deathTitle.textContent = opts.eliminated ? 'ELIMINATED' : 'DOWN!';
+    }
     this.els.deathBy.textContent = `Taken out by ${killerName}`;
-    this.els.deathTimer.textContent = `Respawning in ${Math.ceil(seconds)}…`;
+    if (opts.eliminated) {
+      this.els.deathTimer.textContent = 'Waiting for the match to end…';
+    } else {
+      this.els.deathTimer.textContent = `Respawning in ${Math.ceil(seconds)}…`;
+    }
   }
 
-  updateDeathTimer(seconds) {
+  updateDeathTimer(seconds, opts = {}) {
+    if (opts.eliminated) {
+      this.els.deathTimer.textContent = 'Waiting for the match to end…';
+      return;
+    }
     this.els.deathTimer.textContent = `Respawning in ${Math.ceil(seconds)}…`;
   }
 
@@ -431,23 +492,60 @@ export class GameUI {
     this.els.pause.classList.toggle('hidden', !show);
   }
 
-  showVictory(entries, playerWon) {
+  /**
+   * @param {Array<object>} entries
+   * @param {boolean} playerWon
+   * @param {{ modeId?: string, modeName?: string, teamKills?: object, winnerTeam?: string, goalLimit?: number }} [match]
+   */
+  showVictory(entries, playerWon, match = {}) {
     this.els.victory.classList.remove('hidden');
     this.els.hud.classList.add('hidden');
     this.els.victoryTitle.textContent = playerWon ? 'VICTORY!' : 'MATCH OVER';
-    this.els.victorySub.textContent = playerWon
-      ? `First to ${KILL_LIMIT} — You rule S'Berg Nuketown!`
-      : 'Better luck next round — rematch?';
+    const limit = match.goalLimit || KILL_LIMIT;
+    const tk = match.teamKills;
+    const caps = match.captures;
+    if (match.modeId === 'ctf' && caps) {
+      const teamName = match.winnerTeam === 'bravo' ? 'Bravo' : 'Alpha';
+      const score = `${caps.alpha ?? 0}–${caps.bravo ?? 0}`;
+      this.els.victorySub.textContent = playerWon
+        ? `${teamName} wins CTF ${score} — You rule S'Berg Nuketown!`
+        : `${teamName} wins CTF ${score} — rematch?`;
+    } else if (match.modeId === 'tdm' && tk) {
+      const teamName = match.winnerTeam === 'bravo' ? 'Bravo' : 'Alpha';
+      const score = `${tk.alpha ?? 0}–${tk.bravo ?? 0}`;
+      this.els.victorySub.textContent = playerWon
+        ? `${teamName} wins ${score} — You rule S'Berg Nuketown!`
+        : `${teamName} wins ${score} — rematch?`;
+    } else if (match.modeId === 'pubg') {
+      this.els.victorySub.textContent = playerWon
+        ? 'Last standing — You rule S\'Berg Nuketown!'
+        : 'You were eliminated — rematch?';
+    } else {
+      this.els.victorySub.textContent = playerWon
+        ? `First to ${limit} — You rule S'Berg Nuketown!`
+        : 'Better luck next round — rematch?';
+    }
 
+    const teamMode = match.modeId === 'tdm' || match.modeId === 'ctf';
     const rows = [
-      `<div class="sb-row head"><span>PLAYER</span><span>K</span><span>D</span><span>K/D</span><span>FUN</span></div>`,
+      teamMode
+        ? `<div class="sb-row head"><span>PLAYER</span><span>TEAM</span><span>K</span><span>D</span><span>K/D</span></div>`
+        : `<div class="sb-row head"><span>PLAYER</span><span>K</span><span>D</span><span>K/D</span><span>FUN</span></div>`,
     ];
     for (const e of entries) {
       const kd = e.deaths === 0 ? e.kills.toFixed(2) : (e.kills / e.deaths).toFixed(2);
-      const cls = e.isPlayer ? 'sb-row player' : 'sb-row';
-      rows.push(
-        `<div class="${cls}"><span>${e.name}</span><span>${e.kills}</span><span>${e.deaths}</span><span>${kd}</span><span>${e.funPoints}</span></div>`
-      );
+      const cls = ['sb-row'];
+      if (e.isPlayer) cls.push('player');
+      if (e.team === 'alpha' || e.team === 'bravo') cls.push(`team-${e.team}`);
+      if (teamMode) {
+        rows.push(
+          `<div class="${cls.join(' ')}"><span>${e.name}</span><span>${e.team || '—'}</span><span>${e.kills}</span><span>${e.deaths}</span><span>${kd}</span></div>`
+        );
+      } else {
+        rows.push(
+          `<div class="${cls.join(' ')}"><span>${e.name}</span><span>${e.kills}</span><span>${e.deaths}</span><span>${kd}</span><span>${e.funPoints}</span></div>`
+        );
+      }
     }
     this.els.scoreboard.innerHTML = rows.join('');
   }
@@ -457,7 +555,7 @@ export class GameUI {
   }
 
   /** Mid-match overlay while Tab is held */
-  showMiniScoreboard(entries, show) {
+  showMiniScoreboard(entries, show, match = {}) {
     const root = this.els.miniScoreboard;
     const body = this.els.miniScoreboardBody;
     if (!root || !body) return;
@@ -469,14 +567,40 @@ export class GameUI {
       root.classList.remove('hidden');
       return;
     }
+    const title = this.els.miniScoreboardTitle;
+    const limit = match.goalLimit || KILL_LIMIT;
+    const tk = match.teamKills;
+    const caps = match.captures;
+    if (title) {
+      if (match.modeId === 'ctf' && caps) {
+        title.textContent = `CAPTURE THE FLAG · ${caps.alpha ?? 0}–${caps.bravo ?? 0} / ${limit}`;
+      } else if (match.modeId === 'tdm' && tk) {
+        title.textContent = `TEAM DEATHMATCH · ${tk.alpha ?? 0}–${tk.bravo ?? 0} / ${limit}`;
+      } else if (match.modeId === 'pubg') {
+        title.textContent = `BATTLE ROYALE · ${match.aliveCount ?? 0} ALIVE`;
+      } else {
+        title.textContent = `SCOREBOARD · FIRST TO ${limit}`;
+      }
+    }
+    const teamMode = match.modeId === 'tdm' || match.modeId === 'ctf';
     const rows = [
-      `<div class="mini-sb-row head"><span>#</span><span>PLAYER</span><span>K</span><span>D</span><span>FUN</span></div>`,
+      teamMode
+        ? `<div class="mini-sb-row head"><span>#</span><span>PLAYER</span><span>TEAM</span><span>K</span><span>D</span></div>`
+        : `<div class="mini-sb-row head"><span>#</span><span>PLAYER</span><span>K</span><span>D</span><span>FUN</span></div>`,
     ];
     entries.forEach((e, i) => {
-      const cls = e.isPlayer ? 'mini-sb-row player' : 'mini-sb-row';
-      rows.push(
-        `<div class="${cls}"><span>${i + 1}</span><span>${e.name}</span><span>${e.kills}</span><span>${e.deaths}</span><span>${e.funPoints}</span></div>`
-      );
+      const cls = ['mini-sb-row'];
+      if (e.isPlayer) cls.push('player');
+      if (e.team === 'alpha' || e.team === 'bravo') cls.push(`team-${e.team}`);
+      if (teamMode) {
+        rows.push(
+          `<div class="${cls.join(' ')}"><span>${i + 1}</span><span>${e.name}</span><span>${e.team || '—'}</span><span>${e.kills}</span><span>${e.deaths}</span></div>`
+        );
+      } else {
+        rows.push(
+          `<div class="${cls.join(' ')}"><span>${i + 1}</span><span>${e.name}</span><span>${e.kills}</span><span>${e.deaths}</span><span>${e.funPoints}</span></div>`
+        );
+      }
     });
     body.innerHTML = rows.join('');
     root.classList.remove('hidden');

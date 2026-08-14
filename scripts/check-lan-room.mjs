@@ -44,10 +44,16 @@ assert(room.phase === ROOM_PHASE.live && room.countdown === 0, 'countdown → li
 const late = joinRoom(room, { playerId: 'g2', name: 'Cara' });
 assert(late.ok && late.late === true && room.players.length === 3, 'dm late join');
 
-// PUBG rejects late join
-const pubg = createRoom({ hostId: 'h2', modeId: 'pubg' });
+// PUBG: min 2 players to start; rejects late join
+const pubgSolo = createRoom({ hostId: 'h2', modeId: 'pubg' });
 assert(ROOM_MODES.pubg.allowLateJoin === false, 'pubg flag');
-hostStartMatch(pubg, 'h2', 1);
+const soloStart = hostStartMatch(pubgSolo, 'h2', 1);
+assert(!soloStart.ok, 'pubg start with 1 player fails');
+
+const pubg = createRoom({ hostId: 'h2b', modeId: 'pubg' });
+joinRoom(pubg, { playerId: 'g2', name: 'Bob' });
+const pubgStart = hostStartMatch(pubg, 'h2b', 1);
+assert(pubgStart.ok, 'pubg start with 2 players');
 tickRoomCountdown(pubg, 1);
 const denied = joinRoom(pubg, { playerId: 'x', name: 'X' });
 assert(!denied.ok, 'pubg late join denied');

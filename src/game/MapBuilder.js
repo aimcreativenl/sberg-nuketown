@@ -3059,5 +3059,9 @@ export function buildMap(scene) {
     spawnPoints: safeSpawnPoints,
     coverPoints,
     waypoints,
+    flagHomes: {
+      alpha: { x: -HOUSE_X, y: 0.15, z: -8 },
+      bravo: { x: HOUSE_X, y: 0.15, z: 8 },
+    },
   };
 }

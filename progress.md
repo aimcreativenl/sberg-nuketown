@@ -27,3 +27,18 @@ Status: DONE and independently reviewed.
 
 - Play URL: http://127.0.0.1:5175/
 - Keep the current workspace server attached to `:5175`; do not validate against the unrelated `:5173` Erangel server.
+
+# 2026-08-14 — live-ready backlog; start Phase 3 TDM
+
+User asked to finish outstanding points then push live to Vercel/Render, and which item to start with.
+
+Live-ready order (this push): TDM → CTF → thin BR → merge branch to main → deploy.
+Deferred after this live push: Phase 4b reconnect/migration, Phase 5 maps, Phase 6 installer.
+
+TDM (this chunk): host uses `MODE_TDM` for team score, no friendly fire, house-side spawns, snapshots carry `teamKills`, HUD/scoreboard/victory show team score. Offline PLAY stays deathmatch. Tests: `test:modes`, `test:mp-sync`, `test:phase-d-hud`, `build` green.
+
+CTF (this chunk): flags in west/east yards, host-authoritative pickup/drop/return/capture (3 to win), own flag must be home to score, pastel poles + HUD CAPS + carry banner. Tests: `test:modes`, `test:mp-sync`, `test:phase-d-hud`, `build` green.
+
+Battle Royale (this chunk): last alive, no respawn, min 2 players to start, shrinking pastel zone with outside DPS, HUD ALIVE + eliminated death screen. Offline PLAY stays deathmatch. Tests: `test:modes`, `test:lan-room`, `test:mp-sync`, `test:phase-d-hud`, `build`.
+
+Merged `codex/fix-player-spawn` → `main` and pushed live (Vercel game + Render hub).

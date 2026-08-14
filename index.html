@@ -108,7 +108,7 @@
           </div>
           <div class="stat-divider"></div>
           <div class="stat goal">
-            <span class="label">GOAL</span>
+            <span class="label" id="stat-goal-label">GOAL</span>
             <span id="stat-goal" class="value">0/20</span>
           </div>
           <div class="stat-divider"></div>
@@ -173,10 +173,11 @@
         <div id="damage-numbers"></div>
         <div id="streak-callout" class="hidden"></div>
         <div id="pickup-toast" class="hidden">+50 FUN</div>
+        <div id="flag-carry" class="flag-carry hidden">⚑ YOU HAVE THE FLAG</div>
 
         <!-- Hold Tab mid-match scoreboard -->
         <div id="mini-scoreboard" class="mini-scoreboard hidden">
-          <div class="mini-sb-title">SCOREBOARD · FIRST TO 20</div>
+          <div class="mini-sb-title" id="mini-sb-title">SCOREBOARD · FIRST TO 20</div>
           <div id="mini-scoreboard-body" class="mini-sb-body"></div>
           <div class="mini-sb-hint">Hold Tab</div>
         </div>
@@ -186,7 +187,7 @@
       <div id="death-overlay" class="overlay hidden">
         <div class="death-vignette"></div>
         <div class="death-content">
-          <h2>DOWN!</h2>
+          <h2 id="death-title">DOWN!</h2>
           <p id="death-by">Taken out by —</p>
           <p id="death-timer">Respawning in 3…</p>
         </div>

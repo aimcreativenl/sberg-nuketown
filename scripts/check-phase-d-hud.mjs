@@ -23,7 +23,7 @@ assert(html.includes('1 Pistol') || html.includes('Pistol') && html.includes('M1
 assert(html.includes('9 AI') || html.includes('AI Bots'), 'AI bots mentioned');
 assert(!html.includes('Weapon Upgrades') || html.includes('1 Pistol'), 'no false upgrades-only pitch');
 assert(html.includes('volume-slider') || html.includes('Volume'), 'volume control in HTML');
-assert(html.includes('match-callout'), 'match-callout element');
+assert(html.includes('death-title'), 'death-title element');
 assert(html.includes('SBARG') || html.includes('NUKETOWN'), 'title branding');
 
 // UI helpers
