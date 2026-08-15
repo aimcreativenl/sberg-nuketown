@@ -17,6 +17,7 @@ function makeInput(overrides = {}) {
     shoot: false,
     reload: false,
     shootClick: false,
+    aimHold: false,
     sprinting: false,
     moving: false,
     onSemiFire: () => {},
@@ -116,8 +117,10 @@ assert(juiceP.ammo === wc.currentAmmo, 'juice ammo matches');
 // Punch drives viewmodel (position includes punch after update)
 assert(wc.viewModel != null, 'viewModel present');
 const vmZ = wc.viewModel.position.z;
-// After punch, z should be pushed back relative to pure hip (hip z = -0.42) — allow lerp lag
 assert(Number.isFinite(vmZ), 'viewModel.position.z finite');
+assert(wc.hipPos.z > -0.40 && wc.hipPos.z < -0.28, `hip between float and clip (z=${wc.hipPos.z})`);
+assert(wc.viewScale >= 1.25 && wc.viewScale <= 1.5, `viewmodel scale mid held-size got ${wc.viewScale}`);
+assert(Math.abs(wc.viewModel.scale.x - wc.viewScale) < 1e-6, 'viewmodel mesh uses viewScale');
 
 // Semi-auto: holding shoot without new click / edge must not dump mag next frame
 wc.cooldown = 0;
@@ -147,6 +150,21 @@ const juiceM = wc.getJuiceState();
 assert(juiceM.recoil > juiceBeforeM16.recoil, `M16 recoil increased (${juiceBeforeM16.recoil} → ${juiceM.recoil})`);
 assert(juiceM.kickPitch > juiceBeforeM16.kickPitch, `M16 kickPitch increased`);
 assert(juiceM.punchLength > 0, `M16 punchLength > 0 got ${juiceM.punchLength}`);
+
+{
+  const hipGun = new WeaponController(camera, null, null, null);
+  hipGun.setLoadoutSlot(1);
+  hipGun.update(1 / 60, makeInput({ shoot: true }), true);
+  const hipKick = hipGun.getJuiceState().kickPitch;
+  const adsGun = new WeaponController(camera, null, null, null);
+  adsGun.setLoadoutSlot(1);
+  adsGun.adsBlend = 1;
+  adsGun.adsHeld = true;
+  adsGun.update(1 / 60, makeInput({ shoot: true, aimHold: true }), true);
+  const adsKick = adsGun.getJuiceState().kickPitch;
+  assert(adsKick > 0, `ADS still has some kick got ${adsKick}`);
+  assert(adsKick < hipKick * 0.45, `ADS kick milder than hip (${adsKick} vs ${hipKick})`);
+}
 
 // Auto continues after cooldown with hold
 wc.cooldown = 0;
@@ -197,6 +215,43 @@ wc.currentAmmo = 0;
 wc.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
 assert(wc.isReloading() === true, 'dry-fire starts reload');
 
+// Hip pose NDC: grip on-screen, stock at/near the frame, muzzle inward (16:9 play cam)
+{
+  const playCam = new THREE.PerspectiveCamera(75, 16 / 9, 0.02, 180);
+  const playWc = new WeaponController(playCam, null, null, null);
+  playWc.setLoadoutSlot(1);
+  playWc.viewModel.position.copy(playWc.hipPos);
+  playWc.viewModel.rotation.copy(playWc.hipRot);
+  playWc.viewModel.scale.setScalar(playWc.viewScale);
+  playCam.updateMatrixWorld(true);
+  playWc.viewModel.updateWorldMatrix(true, true);
+  const ndcOf = (x, y, z) => {
+    const v = new THREE.Vector3(x, y, z);
+    playWc.viewModel.localToWorld(v);
+    v.project(playCam);
+    return v;
+  };
+  const grip = ndcOf(0, -0.05, 0.04);
+  const stock = ndcOf(0, 0.02, 0.12);
+  const muzzle = ndcOf(0, 0.02, playWc.viewModel.userData.muzzleZ || -0.34);
+  const inView = (p) => Math.abs(p.x) <= 1.02 && Math.abs(p.y) <= 1.02;
+  const ndc = {
+    grip: { x: +grip.x.toFixed(3), y: +grip.y.toFixed(3) },
+    stock: { x: +stock.x.toFixed(3), y: +stock.y.toFixed(3) },
+    muzzle: { x: +muzzle.x.toFixed(3), y: +muzzle.y.toFixed(3) },
+  };
+  assert(inView(grip), `grip on-screen ndc=(${ndc.grip.x},${ndc.grip.y}) stock=(${ndc.stock.x},${ndc.stock.y}) muzzle=(${ndc.muzzle.x},${ndc.muzzle.y})`);
+  assert(inView(muzzle), `muzzle on-screen ndc=(${ndc.muzzle.x},${ndc.muzzle.y})`);
+  assert(grip.x > 0.05 && grip.x < 0.95, `grip in lower-right x=${ndc.grip.x}`);
+  assert(grip.y < -0.15, `grip below center y=${ndc.grip.y}`);
+  assert(
+    !inView(stock) || stock.y < -0.70 || stock.x > 0.78,
+    `stock at frame edge, not floating ndc=(${ndc.stock.x},${ndc.stock.y})`
+  );
+  assert(muzzle.x < grip.x - 0.05, `muzzle inward of grip (${ndc.muzzle.x} < ${ndc.grip.x})`);
+  globalThis.__viewmodelNdc = ndc;
+}
+
 const report = {
   ok: failures.length === 0,
   ttk: {
@@ -204,6 +259,7 @@ const report = {
     m16: { damage: m16.damage, fireRate: m16.fireRate, magSize: m16.magSize },
   },
   juiceSample: juiceP,
+  viewmodelNdc: globalThis.__viewmodelNdc || null,
   failures,
 };
 console.log(JSON.stringify(report, null, 2));

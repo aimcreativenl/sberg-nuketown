@@ -35,6 +35,12 @@ assert(ui.lastHitWasHeadshot === true, 'showHitmarker(true) records headshot');
 ui.showHitmarker(false);
 assert(ui.lastHitWasHeadshot === false, 'showHitmarker(false) clears headshot flag');
 
+const tHs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+ui.showHeadshot();
+assert(ui.lastHeadshotAt >= tHs, 'showHeadshot sets lastHeadshotAt');
+assert(ui.lastHitWasHeadshot === true, 'showHeadshot records headshot');
+assert(typeof ui.showHeadshot === 'function', 'showHeadshot exists');
+
 const t1 = typeof performance !== 'undefined' ? performance.now() : Date.now();
 ui.showKillFlash();
 assert(ui.lastKillFlashAt >= t1, `showKillFlash sets lastKillFlashAt (got ${ui.lastKillFlashAt})`);
@@ -66,6 +72,7 @@ assert(ps.particles.length > before, 'killBurst spawns particles');
 
 // --- Source wiring: hit path ---
 assert(gameSrc.includes('showHitmarker'), 'Game.js references showHitmarker');
+assert(gameSrc.includes('showHeadshot'), 'Game.js references showHeadshot');
 assert(gameSrc.includes('playHit'), 'Game.js references playHit');
 assert(gameSrc.includes('bloodPuff'), 'Game.js references bloodPuff');
 assert(gameSrc.includes('hitPunch'), 'Game.js has hitPunch camera kick');

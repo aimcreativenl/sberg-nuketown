@@ -1057,6 +1057,40 @@ kbd {
   font-size: 1.4rem;
 }
 
+#headshot-callout {
+  position: absolute;
+  top: 36%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  font-family: 'Syne', 'Nunito', sans-serif;
+  font-size: 2.15rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #ffeaa7;
+  text-shadow:
+    0 2px 0 #e85d8a,
+    0 0 14px rgba(255, 215, 0, 0.9),
+    0 0 28px rgba(255, 143, 171, 0.75);
+  animation: headshotPop 0.45s cubic-bezier(0.2, 1.4, 0.3, 1);
+  pointer-events: none;
+}
+
+@keyframes headshotPop {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.55);
+  }
+  35% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
 @keyframes dmgFloat {
   0% {
     opacity: 1;
@@ -1464,8 +1498,100 @@ kbd {
   cursor: pointer;
 }
 
-.start-settings {
-  margin-bottom: 0.75rem;
+.settings-overlay {
+  z-index: 62;
+}
+
+.settings-panel {
+  text-align: left;
+  min-width: min(26rem, 92vw);
+  max-width: 28rem;
+}
+
+.settings-panel h2 {
+  text-align: center;
+  margin-bottom: 1.1rem;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  margin: 0 0 1rem;
+  font-weight: 700;
+  color: var(--hud-text);
+}
+
+.settings-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+}
+
+.settings-label em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: #ffeaa7;
+}
+
+.settings-hint {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--hud-muted);
+  letter-spacing: 0.02em;
+}
+
+.settings-field input[type='range'] {
+  width: 100%;
+  accent-color: #ff8fab;
+}
+
+.settings-field select {
+  background: rgba(255, 255, 255, 0.92);
+  border: 2px solid #ff8fab;
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--ink);
+  cursor: pointer;
+  max-width: 12rem;
+}
+
+.settings-check {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.65rem;
+  cursor: pointer;
+}
+
+.settings-check input[type='checkbox'] {
+  margin-top: 0.2rem;
+  accent-color: #ff8fab;
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+}
+
+.settings-panel .btn,
+#pause-overlay .panel .btn {
+  display: block;
+  width: min(100%, 16rem);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.settings-panel .btn {
+  margin-top: 0.5rem;
+}
+
+#pause-overlay .panel .btn-primary {
+  margin-top: 0.35rem;
 }
 
 /* Legacy panel title (pause / victory still use .panel) */
@@ -1566,3 +1692,203 @@ kbd {
     width: calc(100vw - 1.5rem);
   }
 }
+
+/* ── Touch / mobile play ── */
+html.touch-play,
+html.touch-play body {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+html.touch-play .how-desktop {
+  display: none;
+}
+
+.how-touch {
+  display: none;
+}
+
+html.touch-play .how-touch {
+  display: block;
+}
+
+.rotate-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background: rgba(18, 12, 24, 0.92);
+  color: #fff8f2;
+  font-family: 'Syne', 'Nunito', sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.rotate-hint p {
+  font-size: 1.6rem;
+}
+
+.rotate-hint span {
+  font-family: 'Nunito', sans-serif;
+  color: var(--hud-muted);
+  letter-spacing: 0.04em;
+}
+
+.touch-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.touch-zone {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-move {
+  left: 0;
+  bottom: 0;
+  width: 46%;
+  height: 62%;
+}
+
+.touch-look {
+  right: 0;
+  top: 0;
+  width: 58%;
+  height: 100%;
+}
+
+.touch-stick {
+  position: absolute;
+  left: 22%;
+  bottom: 18%;
+  width: 108px;
+  height: 108px;
+  margin: -54px 0 0 -54px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 214, 232, 0.35);
+  background: rgba(22, 16, 28, 0.28);
+  pointer-events: none;
+}
+
+.touch-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border-radius: 50%;
+  background: rgba(255, 227, 168, 0.85);
+  box-shadow: 0 4px 16px rgba(12, 8, 18, 0.35);
+  pointer-events: none;
+}
+
+.touch-stick.active {
+  border-color: rgba(255, 158, 184, 0.7);
+}
+
+.touch-btn {
+  pointer-events: auto;
+  touch-action: manipulation;
+  appearance: none;
+  border: 1px solid rgba(255, 214, 232, 0.35);
+  background: rgba(22, 16, 28, 0.55);
+  color: #fff8f2;
+  font-family: 'Syne', 'Nunito', sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.touch-btn:active {
+  filter: brightness(1.15);
+  transform: scale(0.96);
+}
+
+.touch-pause {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  right: calc(10px + env(safe-area-inset-right, 0px));
+  width: 44px;
+  height: 44px;
+  font-size: 0.85rem;
+  z-index: 2;
+}
+
+.touch-guns {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  display: flex;
+  gap: 8px;
+  z-index: 2;
+}
+
+.touch-gun {
+  width: 44px;
+  height: 44px;
+}
+
+.touch-actions {
+  position: absolute;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  grid-template-columns: auto auto auto;
+  grid-template-areas:
+    'use reload jump'
+    '. aim fire';
+  gap: 10px;
+  align-items: end;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.touch-actions .touch-btn {
+  pointer-events: auto;
+}
+
+.touch-use { grid-area: use; min-width: 64px; height: 48px; font-size: 0.78rem; }
+.touch-reload { grid-area: reload; width: 52px; height: 52px; }
+.touch-jump { grid-area: jump; min-width: 70px; height: 52px; font-size: 0.78rem; }
+.touch-aim { grid-area: aim; min-width: 70px; height: 64px; background: rgba(197, 180, 227, 0.45); }
+.touch-fire {
+  grid-area: fire;
+  width: 86px;
+  height: 86px;
+  font-size: 0.95rem;
+  background: rgba(255, 158, 184, 0.72);
+  border-color: rgba(255, 227, 168, 0.55);
+}
+
+html.touch-play #bottom-left {
+  top: calc(62px + env(safe-area-inset-top, 0px));
+  bottom: auto;
+  left: 12px;
+  transform: scale(0.9);
+  transform-origin: top left;
+}
+
+html.touch-play #weapon-banner .weapon-hint,
+html.touch-play .mini-sb-hint {
+  display: none;
+}
+
+html.touch-play #interact-prompt {
+  bottom: 36%;
+}
+

@@ -1,11 +1,8 @@
 /**
- * Graphics/user settings — Phase 0.
- *
- * Small, dependency-free settings store: a few graphics presets, persisted to
- * localStorage, applied to the running `Game` via safe, best-effort field pokes.
- * `applyToGame()` never throws — every touch point is guarded so this can be
- * wired in early without risking the play loop.
+ * User settings: graphics presets + look/audio prefs.
+ * Persisted to localStorage. applyToGame() never throws.
  */
+import { MOUSE_SENS, SCOPE_SENS_MULT } from '../game/constants.js';
 
 const STORAGE_KEY = 'sberg-settings-v1';
 
@@ -15,11 +12,11 @@ const STORAGE_KEY = 'sberg-settings-v1';
 
 /**
  * @typedef {Object} GraphicsPreset
- * @property {number} shadowMapSize - Sun shadow map resolution (square).
- * @property {number} particles - Particle count density multiplier (1 = default).
- * @property {number} pixelRatioCap - Max devicePixelRatio the renderer is allowed to use.
- * @property {number} bloomStrengthScale - Multiplier applied on top of the base bloom strength.
- * @property {boolean} aoEnabled - Reserved for a future ambient-occlusion pass (not implemented yet).
+ * @property {number} shadowMapSize
+ * @property {number} particles
+ * @property {number} pixelRatioCap
+ * @property {number} bloomStrengthScale
+ * @property {boolean} aoEnabled
  */
 
 /** @type {Record<GraphicsPresetId, GraphicsPreset>} */
@@ -33,8 +30,38 @@ export const GRAPHICS_PRESETS = {
 /** @type {GraphicsPresetId} */
 const DEFAULT_PRESET = 'high';
 
+const DEFAULT_VOLUME = 0.35;
+const SENS_MIN = 0.25;
+const SENS_MAX = 2;
+
+function clamp(n, lo, hi) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return lo;
+  return Math.max(lo, Math.min(hi, v));
+}
+
 function defaultSettings() {
-  return { graphicsPreset: DEFAULT_PRESET };
+  return {
+    graphicsPreset: DEFAULT_PRESET,
+    mouseSens: 1,
+    adsSens: 1,
+    invertY: false,
+    volume: DEFAULT_VOLUME,
+    muted: false,
+  };
+}
+
+function normalizeSettings(raw = {}) {
+  const d = defaultSettings();
+  const preset = GRAPHICS_PRESETS[raw.graphicsPreset] ? raw.graphicsPreset : d.graphicsPreset;
+  return {
+    graphicsPreset: preset,
+    mouseSens: clamp(raw.mouseSens ?? d.mouseSens, SENS_MIN, SENS_MAX),
+    adsSens: clamp(raw.adsSens ?? d.adsSens, SENS_MIN, SENS_MAX),
+    invertY: !!raw.invertY,
+    volume: clamp(raw.volume ?? d.volume, 0, 1),
+    muted: !!raw.muted,
+  };
 }
 
 let cached = null;
@@ -42,29 +69,36 @@ let cached = null;
 /** Load (and cache) settings from localStorage, falling back to defaults on any error. */
 export function getSettings() {
   if (cached) return cached;
+  let parsed = {};
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && GRAPHICS_PRESETS[parsed.graphicsPreset]) {
-        cached = { ...defaultSettings(), ...parsed };
-        return cached;
-      }
-    }
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    if (raw) parsed = JSON.parse(raw) || {};
   } catch (err) {
     console.warn('[Settings] Failed to load, using defaults', err);
   }
-  cached = defaultSettings();
+  cached = normalizeSettings({ ...defaultSettings(), ...parsed });
   return cached;
 }
 
 function saveSettings(settings) {
   cached = settings;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    }
   } catch (err) {
     console.warn('[Settings] Failed to save', err);
   }
+}
+
+/**
+ * Merge a partial update into saved settings.
+ * @param {Partial<ReturnType<typeof defaultSettings>>} partial
+ */
+export function patchSettings(partial = {}) {
+  const next = normalizeSettings({ ...getSettings(), ...partial });
+  saveSettings(next);
+  return next;
 }
 
 /**
@@ -76,15 +110,29 @@ export function setGraphicsPreset(id) {
     console.warn(`[Settings] Unknown graphics preset "${id}", ignoring`);
     return getSettings();
   }
-  const next = { ...getSettings(), graphicsPreset: id };
-  saveSettings(next);
-  return next;
+  return patchSettings({ graphicsPreset: id });
 }
 
 /** @returns {GraphicsPreset} */
 export function getGraphicsPreset() {
   const { graphicsPreset } = getSettings();
   return GRAPHICS_PRESETS[graphicsPreset] || GRAPHICS_PRESETS[DEFAULT_PRESET];
+}
+
+/**
+ * Yaw/pitch scales for one look frame. invertY flips pitch only.
+ * Aiming (ADS hold or scope) uses the existing scope multiplier so 100% feels like today.
+ * @param {{ aiming?: boolean, scoped?: boolean }} pose
+ * @param {ReturnType<typeof getSettings>} [settings]
+ */
+export function lookScale(pose = {}, settings = getSettings()) {
+  const aiming = !!(pose.aiming || pose.scoped);
+  const hip = MOUSE_SENS * settings.mouseSens;
+  const scale = hip * (aiming ? SCOPE_SENS_MULT * settings.adsSens : 1);
+  return {
+    yawScale: scale,
+    pitchScale: settings.invertY ? -scale : scale,
+  };
 }
 
 /**
@@ -96,6 +144,14 @@ export function getGraphicsPreset() {
 export function applyToGame(game) {
   if (!game) return;
   const preset = getGraphicsPreset();
+  const settings = getSettings();
+
+  try {
+    game.audio?.setVolume?.(settings.volume);
+    game.audio?.setMuted?.(settings.muted);
+  } catch (err) {
+    console.warn('[Settings] applyToGame: audio failed', err);
+  }
 
   // Renderer pixel ratio cap
   try {

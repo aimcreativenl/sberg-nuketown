@@ -352,8 +352,12 @@ export class WeaponController {
     this.adsHeld = false;
     this.adsBlend = 0;
     this.viewModel = null;
-    this.hipPos = new THREE.Vector3(0.22, -0.18, -0.42);
-    this.adsPos = new THREE.Vector3(0.0, -0.11, -0.34);
+    // Held hip pose: enlarge at moderate distance so the stock hits the
+    // frame edge while the grip stays on-screen. −Z is camera-forward.
+    this.hipPos = new THREE.Vector3(0.22, -0.13, -0.36);
+    this.adsPos = new THREE.Vector3(0.0, -0.12, -0.26);
+    this.hipRot = new THREE.Euler(0.04, 0.06, 0.03);
+    this.viewScale = 1.32;
     this.baseFov = 75;
     this.wasShoot = false;
     this.muzzleLocal = new THREE.Vector3(0.0, 0.03, -0.21);
@@ -398,8 +402,8 @@ export class WeaponController {
     const def = this.getCurrent();
     this.viewModel = buildViewModel(def);
     this.viewModel.position.copy(this.hipPos);
-    // Keep modest — reference is a small handgun, not a screen prop
-    this.viewModel.scale.setScalar(0.78);
+    this.viewModel.rotation.copy(this.hipRot);
+    this.viewModel.scale.setScalar(this.viewScale);
     this.viewModel.renderOrder = 9999;
     this.viewModel.frustumCulled = false;
     this.viewModel.traverse((c) => {
@@ -657,6 +661,8 @@ export class WeaponController {
     const wantShoot = !!input.shoot;
     const wantReload = !!input.reload;
     const shootClick = !!input.shootClick;
+    /** 1 = hip, ~0.3 = ADS/scope — keep a little climb, not a muzzle rocket. */
+    const aimMul = THREE.MathUtils.lerp(1, 0.32, this.adsBlend);
 
     const scopeTarget = this.isScoped() ? 1 : 0;
     this.scopeBlend = THREE.MathUtils.lerp(this.scopeBlend, scopeTarget, 1 - Math.pow(0.0002, dt));
@@ -670,26 +676,31 @@ export class WeaponController {
     const walkBobX = Math.sin(this.bobTime * 4.75) * 0.01 * bobAmp;
 
     // Juice decay — punch snaps back, recoil/kick settle (viewmodel reads punchPos every frame)
-    this.recoil = Math.max(0, this.recoil - dt * 8);
+    this.recoil = Math.max(0, this.recoil - dt * (8 + 6 * this.adsBlend));
     this.punchPos.multiplyScalar(Math.pow(0.0008, dt));
     this.kickPitch = THREE.MathUtils.lerp(this.kickPitch, 0, 1 - Math.pow(0.00015, dt));
     this.kickYaw = THREE.MathUtils.lerp(this.kickYaw, 0, 1 - Math.pow(0.00015, dt));
 
     const targetPos = this.hipPos.clone().lerp(this.adsPos, this.adsBlend);
-    // Stronger punchPos + recoil drive on viewmodel position
-    targetPos.x += swayX + walkBobX + this.punchPos.x;
-    targetPos.y += this.recoil * 0.08 + swayY + walkBobY + this.punchPos.y;
+    // ADS: keep punch, but don't lift the sights off the crosshair
+    targetPos.x += swayX + walkBobX + this.punchPos.x * aimMul;
+    targetPos.y += this.recoil * 0.08 * aimMul + swayY + walkBobY + this.punchPos.y * aimMul;
     targetPos.z += this.recoil * 0.06 + this.punchPos.z;
     this.viewModel.position.lerp(targetPos, 1 - Math.pow(0.00008, dt));
 
     if (!this.reloading) {
+      const hip = 1 - this.adsBlend;
       this.viewModel.rotation.x =
-        -this.recoil * 0.22 +
-        this.punchPos.z * 0.35 +
+        this.hipRot.x * hip -
+        this.recoil * 0.22 * aimMul -
+        this.punchPos.z * 0.35 * aimMul +
         Math.sin(this.bobTime * 1.2) * 0.01 * bobAmp;
       this.viewModel.rotation.y =
-        this.punchPos.x * 0.8 + Math.sin(this.bobTime * 0.9) * 0.012 * bobAmp;
+        this.hipRot.y * hip +
+        this.punchPos.x * 0.8 +
+        Math.sin(this.bobTime * 0.9) * 0.012 * bobAmp;
       this.viewModel.rotation.z =
+        this.hipRot.z * hip +
         Math.sin(performance.now() * 0.008) * this.recoil * 0.05 +
         Math.sin(this.bobTime * 1.1) * 0.008 * bobAmp;
     }
@@ -772,11 +783,11 @@ export class WeaponController {
       // Phase A viewmodel juice — stronger punch / kick / recoil per shot
       const kick =
         def.id === 'm16' ? 0.58 : def.id === 'shotgun' ? 1.35 : def.id === 'pistol' ? 0.78 : 0.65;
-      this.recoil = Math.min(1.85, this.recoil + kick);
-      this.kickPitch += 0.032 + kick * 0.028;
-      this.kickYaw += (Math.random() - 0.5) * 0.022 * kick;
-      // Cap +Z punch so M16 stock stays beyond camera near plane (0.05)
-      const punchZ = Math.min(0.12, 0.08 + kick * 0.05);
+      const aimKick = THREE.MathUtils.lerp(1, 0.32, this.adsBlend);
+      this.recoil = Math.min(1.85, this.recoil + kick * THREE.MathUtils.lerp(1, 0.55, this.adsBlend));
+      this.kickPitch += (0.032 + kick * 0.028) * aimKick;
+      this.kickYaw += (Math.random() - 0.5) * 0.022 * kick * aimKick;
+      const punchZ = Math.min(0.055, 0.03 + kick * 0.03);
       this.punchPos.set(
         (Math.random() - 0.5) * 0.045,
         0.04 + kick * 0.035,

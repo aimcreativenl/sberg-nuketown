@@ -14,6 +14,11 @@ export const PLAYER_COYOTE = 0.08;
 export const GRAVITY = 24;
 export const PLAYER_HEIGHT = 1.7;
 export const PLAYER_RADIUS = 0.38;
+/**
+ * Hitscan sphere around the visual head cube (0.4×0.42×0.36, plus hat/ears).
+ * Must cover cube corners (~0.34) so a scoped shot on the face/helmet is a headshot.
+ */
+export const HEAD_HIT_RADIUS = 0.38;
 export const RESPAWN_TIME = 3;
 export const DONUT_FUN_POINTS = 50;
 export const BOT_COUNT = 9;

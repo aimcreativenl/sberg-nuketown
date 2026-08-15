@@ -24,6 +24,7 @@ export class GameUI {
       crosshair: el('crosshair'),
       hitmarker: el('hitmarker'),
       damageNumbers: el('damage-numbers'),
+      headshot: el('headshot-callout'),
       streak: el('streak-callout'),
       pickup: el('pickup-toast'),
       death: el('death-overlay'),
@@ -31,6 +32,7 @@ export class GameUI {
       deathBy: el('death-by'),
       deathTimer: el('death-timer'),
       pause: el('pause-overlay'),
+      settings: el('settings-overlay'),
       victory: el('victory-overlay'),
       victoryTitle: el('victory-title'),
       victorySub: el('victory-sub'),
@@ -44,6 +46,7 @@ export class GameUI {
       lobby: el('lobby-screen'),
     };
     this._hitTimer = 0;
+    this._headshotTimer = 0;
     this._streakTimer = 0;
     this._killFlashTimer = 0;
     this._killConfirmTimer = 0;
@@ -54,6 +57,8 @@ export class GameUI {
     /** @type {number} performance.now() of last kill confirm */
     this.lastKillConfirmAt = 0;
     this.lastHitWasHeadshot = false;
+    /** @type {number} performance.now() of last HEADSHOT! callout */
+    this.lastHeadshotAt = 0;
     /** @type {string|null} last countdown / FIGHT label */
     this.lastMatchCallout = null;
     /** @type {number} */
@@ -67,6 +72,7 @@ export class GameUI {
     this.els.death?.classList.add('hidden');
     this.els.pause?.classList.add('hidden');
     this.els.victory?.classList.add('hidden');
+    this.hideSettings();
     this.hideJoin();
     this.hideLobby();
     this.hideMatchCallout();
@@ -205,6 +211,20 @@ export class GameUI {
     this.els.hud?.classList.remove('hidden');
     this.els.victory?.classList.add('hidden');
     this.els.pause?.classList.add('hidden');
+    this.hideSettings();
+  }
+
+  showSettings() {
+    this.els.settings?.classList.remove('hidden');
+  }
+
+  hideSettings() {
+    this.els.settings?.classList.add('hidden');
+  }
+
+  isSettingsOpen() {
+    const el = this.els.settings;
+    return !!(el && !el.classList.contains('hidden'));
   }
 
   /**
@@ -319,6 +339,22 @@ export class GameUI {
     }
     // Crosshair gap pulse on hit (not only on fire)
     this.pulseCrosshair(headshot ? 140 : 110);
+  }
+
+  /** Big on-screen "HEADSHOT!" — stays above the scope vignette. */
+  showHeadshot() {
+    this.lastHeadshotAt =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this.lastHitWasHeadshot = true;
+    const el = this.els.headshot;
+    if (!el) return;
+    el.textContent = 'HEADSHOT!';
+    el.classList.remove('hidden');
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    clearTimeout(this._headshotTimer);
+    this._headshotTimer = setTimeout(() => el.classList.add('hidden'), 900);
   }
 
   showDamageNumber(damage, headshot = false) {
@@ -498,6 +534,7 @@ export class GameUI {
    * @param {{ modeId?: string, modeName?: string, teamKills?: object, winnerTeam?: string, goalLimit?: number }} [match]
    */
   showVictory(entries, playerWon, match = {}) {
+    this.hideSettings();
     this.els.victory.classList.remove('hidden');
     this.els.hud.classList.add('hidden');
     this.els.victoryTitle.textContent = playerWon ? 'VICTORY!' : 'MATCH OVER';

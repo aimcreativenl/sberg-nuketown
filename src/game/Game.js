@@ -28,7 +28,9 @@ import { ParticleSystem } from './Particles.js';
 import { GameAudio } from './Audio.js';
 import { GameUI } from './UI.js';
 import { GFX } from './materials.js';
-import { getSettings, setGraphicsPreset, applyToGame } from '../settings/Settings.js';
+import { getSettings, setGraphicsPreset, patchSettings, applyToGame } from '../settings/Settings.js';
+import { isTouchPlay, isTouchPortrait } from '../input/detectPlayMode.js';
+import { TouchControls } from '../input/TouchControls.js';
 import { MenuCamera } from './MenuCamera.js';
 import {
   playerMoveBlocked,
@@ -49,7 +51,9 @@ import {
   RESPAWN_TIME,
   DONUT_FUN_POINTS,
   PLAYER_HEIGHT,
+  HEAD_HIT_RADIUS,
 } from './constants.js';
+import { pickVolumeHit } from './hitscan.js';
 import { OnlineSession } from '../net/OnlineSession.js';
 import { MpMatch } from '../net/MpMatch.js';
 import { getModeById } from '../modes/registry.js';
@@ -149,7 +153,20 @@ export class Game {
     this.particles.snowDust();
 
     this.player = new Player(this.camera, this.mapData);
+    this.touchPlay = isTouchPlay();
+    this.player._touchPlay = this.touchPlay;
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('touch-play', this.touchPlay);
+    }
     this.player.bindInput(canvas);
+    this.touch = new TouchControls({
+      player: this.player,
+      root: typeof document !== 'undefined' ? document.getElementById('touch-controls') : null,
+      rotate: typeof document !== 'undefined' ? document.getElementById('rotate-hint') : null,
+      onPause: () => this.pause(),
+      onUnlock: () => this.audio.unlock(),
+    });
+    this._syncTouchChrome();
 
     this.weapons = new WeaponController(this.camera, this.scene, this.audio, this.particles);
     this.menuCam = new MenuCamera(this.camera, {
@@ -197,6 +214,7 @@ export class Game {
     this._enterMenu();
     this._onResize = () => this._resize();
     window.addEventListener('resize', this._onResize);
+    window.addEventListener('orientationchange', this._onResize);
     this._resize();
 
     this._loop = this._loop.bind(this);
@@ -222,11 +240,13 @@ export class Game {
   _enterMenu() {
     this.menuCam?.start();
     if (this.weapons?.viewModel) this.weapons.viewModel.visible = false;
+    this._syncTouchChrome();
   }
 
   _leaveMenu() {
     this.menuCam?.stop();
     if (this.weapons?.viewModel) this.weapons.viewModel.visible = true;
+    this._syncTouchChrome();
   }
 
   _initRenderer() {
@@ -349,8 +369,8 @@ export class Game {
     skyMesh.name = 'sky_golden_hour';
     this.scene.add(skyMesh);
 
-    // near=0.05 so the large FP pistol is never near-clipped; far covers expanded arena
-    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 180);
+    // near=0.02 lets the FP stock sit against the camera without eating the grip
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.02, 180);
     this.camera.position.set(0, PLAYER_HEIGHT, 10);
     // CRITICAL: camera must live in the scene graph. FPS viewmodels are
     // parented to the camera; if the camera is not in the scene they never draw.
@@ -497,6 +517,16 @@ export class Game {
       }
     });
 
+    document.getElementById('btn-settings-start')?.addEventListener('click', () => {
+      this.ui.showSettings();
+    });
+    document.getElementById('btn-settings-pause')?.addEventListener('click', () => {
+      this.ui.showSettings();
+    });
+    document.getElementById('btn-settings-back')?.addEventListener('click', () => {
+      this.ui.hideSettings();
+    });
+
     const howBtn = document.getElementById('btn-how');
     const howPanel = document.getElementById('start-how');
     howBtn?.addEventListener('click', () => {
@@ -504,10 +534,10 @@ export class Game {
       howBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
 
-    this._bindVolumeControls();
-    this._bindGraphicsControls();
+    this._bindSettingsControls();
 
     document.addEventListener('pointerlockchange', () => {
+      if (this.touchPlay) return;
       if (!document.pointerLockElement && this.running && !this.matchOver && this.player.alive) {
         if (isCountdown(this.matchFlow)) return;
         // Multiplayer: tab-switching steals pointer lock constantly. Pausing the host
@@ -524,6 +554,7 @@ export class Game {
         this.player?.keys?.clear?.();
         this.player.buttons.left = false;
         this.player.buttons.right = false;
+        this.touch?.reset?.();
         return;
       }
       this.clock.getDelta();
@@ -531,6 +562,11 @@ export class Game {
     });
 
     window.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape' && this.ui.isSettingsOpen?.()) {
+        this.ui.hideSettings();
+        e.preventDefault();
+        return;
+      }
       const t = e.target;
       if (
         t instanceof Element &&
@@ -649,8 +685,12 @@ export class Game {
       if (msg.attackerId === localId) {
         this.ui.showHitmarker?.(!!msg.headshot);
         this.ui.showDamageNumber?.(msg.damage || 0, !!msg.headshot);
-        if (msg.headshot) this.audio.playHeadshot?.();
-        else this.audio.playHit?.();
+        if (msg.headshot) {
+          this.ui.showHeadshot?.();
+          this.audio.playHeadshot?.();
+        } else {
+          this.audio.playHit?.();
+        }
       }
       if (msg.victimId === localId) {
         this.audio.playHurt?.();
@@ -685,7 +725,7 @@ export class Game {
       }
       if (msg.attackerId === localId) {
         this.audio.playKill?.();
-        this.ui.showKillConfirm?.();
+        if (!msg.headshot) this.ui.showKillConfirm?.();
       }
       return;
     }
@@ -1022,53 +1062,71 @@ export class Game {
     this._tabScoreboard = false;
     this.ui.showMiniScoreboard(null, false);
     this._requestPointerLock();
+    this._syncTouchChrome();
     this.clock.getDelta();
   }
 
-  _bindVolumeControls() {
-    const syncSliders = (vol01, muted) => {
-      const pct = Math.round(vol01 * 100);
-      for (const id of ['volume-slider', 'volume-slider-pause']) {
-        const el = document.getElementById(id);
-        if (el) el.value = String(pct);
-      }
-      for (const id of ['mute-toggle', 'mute-toggle-pause']) {
-        const el = document.getElementById(id);
-        if (el) el.checked = !!muted;
-      }
+  _bindSettingsControls() {
+    const pct = (n) => String(Math.round(Number(n) * 100));
+    const fillFromStore = () => {
+      const s = getSettings();
+      const mouse = document.getElementById('sens-mouse');
+      const ads = document.getElementById('sens-ads');
+      const invert = document.getElementById('sens-invert-y');
+      const vol = document.getElementById('volume-slider');
+      const mute = document.getElementById('mute-toggle');
+      const gfx = document.getElementById('graphics-preset-select');
+      if (mouse) mouse.value = pct(s.mouseSens);
+      if (ads) ads.value = pct(s.adsSens);
+      if (invert) invert.checked = !!s.invertY;
+      if (vol) vol.value = pct(s.volume);
+      if (mute) mute.checked = !!s.muted;
+      if (gfx) gfx.value = s.graphicsPreset;
+      const mouseVal = document.getElementById('sens-mouse-val');
+      const adsVal = document.getElementById('sens-ads-val');
+      const volVal = document.getElementById('volume-val');
+      if (mouseVal) mouseVal.textContent = pct(s.mouseSens);
+      if (adsVal) adsVal.textContent = pct(s.adsSens);
+      if (volVal) volVal.textContent = pct(s.volume);
     };
-    const onVol = (e) => {
+
+    fillFromStore();
+    try {
+      applyToGame(this);
+    } catch (_) {}
+
+    const onSens = () => {
+      const mouseEl = document.getElementById('sens-mouse');
+      const adsEl = document.getElementById('sens-ads');
+      const invertEl = document.getElementById('sens-invert-y');
+      patchSettings({
+        mouseSens: Number(mouseEl?.value || 100) / 100,
+        adsSens: Number(adsEl?.value || 100) / 100,
+        invertY: !!invertEl?.checked,
+      });
+      fillFromStore();
+    };
+    document.getElementById('sens-mouse')?.addEventListener('input', onSens);
+    document.getElementById('sens-ads')?.addEventListener('input', onSens);
+    document.getElementById('sens-invert-y')?.addEventListener('change', onSens);
+
+    document.getElementById('volume-slider')?.addEventListener('input', (e) => {
       const v = Number(e.target.value) / 100;
       this.audio.unlock();
-      this.audio.setVolume(v);
-      syncSliders(this.audio.getVolume(), this.audio.isMuted());
-    };
-    const onMute = (e) => {
+      patchSettings({ volume: v, muted: false });
+      applyToGame(this);
+      fillFromStore();
+    });
+    document.getElementById('mute-toggle')?.addEventListener('change', (e) => {
       this.audio.unlock();
-      this.audio.setMuted(e.target.checked);
-      syncSliders(this.audio.getVolume(), this.audio.isMuted());
-    };
-    for (const id of ['volume-slider', 'volume-slider-pause']) {
-      document.getElementById(id)?.addEventListener('input', onVol);
-    }
-    for (const id of ['mute-toggle', 'mute-toggle-pause']) {
-      document.getElementById(id)?.addEventListener('change', onMute);
-    }
-    syncSliders(this.audio.getVolume(), this.audio.isMuted());
-  }
-
-  /** Phase 0: minimal graphics preset control on the pause screen. Safe no-op if missing. */
-  _bindGraphicsControls() {
-    const select = document.getElementById('graphics-preset-select');
-    if (!select) return;
-    try {
-      select.value = getSettings().graphicsPreset;
-    } catch (err) {
-      console.warn('[Game] Failed to read saved graphics preset', err);
-    }
-    select.addEventListener('change', (e) => {
+      patchSettings({ muted: !!e.target.checked });
+      applyToGame(this);
+      fillFromStore();
+    });
+    document.getElementById('graphics-preset-select')?.addEventListener('change', (e) => {
       setGraphicsPreset(e.target.value);
       applyToGame(this);
+      fillFromStore();
     });
   }
 
@@ -1108,10 +1166,12 @@ export class Game {
     this._tabScoreboard = false;
     this.ui.showMiniScoreboard(null, false);
     this._requestPointerLock();
+    this._syncTouchChrome();
     this.clock.getDelta();
   }
 
   _requestPointerLock() {
+    if (this.touchPlay) return;
     const p = this.canvas.requestPointerLock?.();
     if (p && typeof p.catch === 'function') p.catch(() => {});
   }
@@ -1119,6 +1179,7 @@ export class Game {
   /** Click the game view to capture mouse look (needed after tab switch / dual-window tests). */
   _bindPointerLockClick() {
     this.canvas.addEventListener('click', () => {
+      if (this.touchPlay) return;
       if (!this.running || this.matchOver || this.paused || !this.player?.alive) return;
       if (document.pointerLockElement === this.canvas) return;
       this._requestPointerLock();
@@ -1132,14 +1193,17 @@ export class Game {
     this.ui.showMiniScoreboard(null, false);
     document.exitPointerLock?.();
     this.ui.showPause(true);
+    this._syncTouchChrome();
   }
 
   resume() {
     if (!this.running || this.matchOver) return;
     this.paused = false;
+    this.ui.hideSettings();
     this.ui.showPause(false);
     this.audio.unlock();
     this._requestPointerLock();
+    this._syncTouchChrome();
     this.clock.getDelta();
   }
 
@@ -1303,8 +1367,10 @@ export class Game {
       });
     }
 
-    // Scope sensitivity uses last frame's aim state (ADS hold or optic)
-    this.player._scopedLook = this.weapons.isAiming?.() || this.weapons.isScoped();
+    // Look: ADS hold and full scope share the aim-sensitivity slider
+    this.player._lookScope = this.weapons.isScoped();
+    this.player._lookAim = !!this.weapons.isAiming?.();
+    this.player._scopedLook = this.player._lookAim;
 
     const botAgents = this.bots
       .getAliveBots()
@@ -1425,6 +1491,12 @@ export class Game {
     this.doors.update(dt);
     this.medkits.update(dt);
     this._updateInteract();
+    {
+      const prompt = document.getElementById('interact-prompt');
+      const shown = prompt && !prompt.classList.contains('hidden');
+      const canUse = !!(shown && /(door|medkit)/i.test(prompt.textContent || ''));
+      this.touch?.setUseAvailable(canUse && this.touchPlay && this.running && !this.paused);
+    }
 
     // Bot donut pickup (horizontal radius)
     for (const bot of this.bots.getAliveBots()) {
@@ -1534,52 +1606,22 @@ export class Game {
 
     for (const bot of this.bots.getAliveBots()) {
       const head = bot.character.getHeadWorldPosition();
-      let botBest = null;
-      let headCandidate = null;
       const volumes =
         typeof bot.character.getHitVolumes === 'function'
           ? bot.character.getHitVolumes()
           : [
-              { kind: 'sphere', center: head, radius: 0.24, headshot: true },
+              { kind: 'sphere', center: head, radius: HEAD_HIT_RADIUS, headshot: true },
               { kind: 'sphere', center: bot.character.getChestWorldPosition(), radius: 0.3 },
             ];
 
-      for (const vol of volumes) {
-        const hit =
-          vol.kind === 'capsule'
-            ? this._rayHitsCapsule(shot.origin, shot.direction, vol.a, vol.b, vol.radius)
-            : this._rayHitsSphere(shot.origin, shot.direction, vol.center, vol.radius);
-        if (!hit || hit.dist > shot.range || hit.dist < 0.05) continue;
-        if (this._shotBlocked(shot.origin, hit.point, hit.dist)) continue;
-        const headshot = !!vol.headshot && hit.point.distanceTo(head) <= (vol.radius ?? 0.24) + 0.05;
-        const candidate = {
-          bot,
-          dist: hit.dist,
-          headshot,
-          point: hit.point,
-          headRadius: vol.radius ?? 0.24,
-        };
-        if (headshot) {
-          if (!headCandidate || candidate.dist < headCandidate.dist) headCandidate = candidate;
-        } else if (!botBest || candidate.dist < botBest.dist) {
-          botBest = candidate;
-        }
-      }
-
-      const bodyOverlapsHead =
-        headCandidate &&
-        botBest &&
-        botBest.point.distanceTo(head) <= headCandidate.headRadius + 0.05;
-      if (
-        headCandidate &&
-        (!botBest || headCandidate.dist <= botBest.dist || bodyOverlapsHead)
-      ) {
-        botBest = headCandidate;
-      }
-      if (botBest && botBest.dist <= bestDist) {
-        best = botBest;
-        bestDist = botBest.dist;
-      }
+      const picked = pickVolumeHit(shot.origin, shot.direction, shot.range, volumes, head, {
+        rayHitsSphere: (o, d, c, r) => this._rayHitsSphere(o, d, c, r),
+        rayHitsCapsule: (o, d, a, b, r) => this._rayHitsCapsule(o, d, a, b, r),
+        shotBlocked: (from, to, dist) => this._shotBlocked(from, to, dist),
+      });
+      if (!picked || picked.dist > bestDist) continue;
+      best = { bot, dist: picked.dist, headshot: picked.headshot, point: picked.point };
+      bestDist = picked.dist;
     }
 
     if (!best) return;
@@ -1597,15 +1639,19 @@ export class Game {
     // Always run hit UI + audio hooks
     this.ui.showHitmarker(best.headshot);
     this.ui.showDamageNumber(dmg, best.headshot);
-    if (best.headshot) this.audio.playHeadshot();
-    else this.audio.playHit();
+    if (best.headshot) {
+      this.ui.showHeadshot?.();
+      this.audio.playHeadshot();
+    } else {
+      this.audio.playHit();
+    }
     // Small temporary camera hit punch (decays in _update)
     const punch = best.headshot ? 0.014 : 0.008;
     this.hitPunch.pitch += punch;
     this.hitPunch.yaw += (Math.random() - 0.5) * (best.headshot ? 0.012 : 0.008);
 
     if (result.killed) {
-      this._playerGotKill(best.bot, shot.weaponId);
+      this._playerGotKill(best.bot, shot.weaponId, { headshot: best.headshot });
     }
   }
 
@@ -1623,7 +1669,7 @@ export class Game {
   }
 
   /**
-   * Ray vs finite capsule (segment a→b + radius). Covers torso between pelvis and head.
+   * Ray vs finite capsule (segment a→b + radius). Covers torso between pelvis and chest.
    * @returns {{ dist: number, point: THREE.Vector3 } | null}
    */
   _rayHitsCapsule(origin, dir, a, b, radius) {
@@ -1669,7 +1715,7 @@ export class Game {
     });
   }
 
-  _playerGotKill(bot, weaponId) {
+  _playerGotKill(bot, weaponId, { headshot = false } = {}) {
     this.player.kills += 1;
     this.player.killStreak += 1;
     // Kill feed + donut are guaranteed in _onBotDeath (single source of truth)
@@ -1678,7 +1724,7 @@ export class Game {
 
     // Kill juice: flash, confirm, sting, confetti burst at death pos
     this.ui.showKillFlash?.();
-    this.ui.showKillConfirm?.();
+    if (!headshot) this.ui.showKillConfirm?.();
     this.audio.playKill?.();
     const burstAt = (bot.position || bot.mesh?.position || new THREE.Vector3()).clone();
     burstAt.y = (burstAt.y || 0) + 0.9;
@@ -1803,6 +1849,7 @@ export class Game {
       ...this._hudMatch(),
       ...extra,
     });
+    this._syncTouchChrome();
     this.audio.playKillStreak(10);
   }
 
@@ -1839,8 +1886,8 @@ export class Game {
     if (door) {
       if (prompt) {
         prompt.textContent = door.open
-          ? 'Press E to close door'
-          : 'Press E to open door';
+          ? `${this._useVerb()} to close door`
+          : `${this._useVerb()} to open door`;
         prompt.classList.remove('hidden');
       }
       // MP: host owns door toggles via interact input — don't flip locally (desyncs physics)
@@ -1877,7 +1924,7 @@ export class Game {
     const near = this.medkits.getNearby(this.player.position);
     if (near) {
       if (prompt) {
-        prompt.textContent = 'Press E to take medkit!';
+        prompt.textContent = `${this._useVerb()} to take medkit!`;
         prompt.classList.remove('hidden');
       }
       if (this.player.consumeUsePress()) {
@@ -1927,6 +1974,19 @@ export class Game {
     this.player.usePressed = false;
   }
 
+  _useVerb() {
+    return this.touchPlay ? 'Tap USE' : 'Press E';
+  }
+
+  _syncTouchChrome() {
+    if (!this.touch) return;
+    const portrait = !!this.touchPlay && isTouchPortrait();
+    this.touch.setRotateVisible(portrait);
+    const live = this.touchPlay && this.running && !this.paused && !this.matchOver && !portrait;
+    if (live) this.touch.show();
+    else this.touch.hide();
+  }
+
   _resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -1939,5 +1999,6 @@ export class Game {
       this.composer.setSize(w, h);
       this._syncFxaaResolution(w, h);
     }
+    this._syncTouchChrome();
   }
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { HEAD_HIT_RADIUS } from './constants.js';
 import { createCharMat } from './materials.js';
 import { roundedBoxGeo } from './softGeo.js';
 
@@ -841,10 +842,11 @@ export class VoxelCharacter {
     const pelvis = this._wp(this.hips, 0, 0.05, 0);
 
     const volumes = [
-      { kind: 'sphere', center: head, radius: 0.24, headshot: true },
+      { kind: 'sphere', center: head, radius: HEAD_HIT_RADIUS, headshot: true },
       { kind: 'sphere', center: chest, radius: 0.3, headshot: false },
       { kind: 'sphere', center: pelvis, radius: 0.27, headshot: false },
-      { kind: 'capsule', a: pelvis, b: head, radius: 0.28, headshot: false },
+      // Stop at the chest — a capsule through the head steals headshots (closer body hit).
+      { kind: 'capsule', a: pelvis, b: chest, radius: 0.28, headshot: false },
     ];
 
     // Arms: shoulder pad → hand (animated with shoulderL/R)

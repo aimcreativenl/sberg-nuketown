@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>S'Berg Nuketown - Jhieee them all</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='%23ff8fab'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23fff8e7'/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -33,19 +35,21 @@
             <button id="btn-how" class="btn-text" type="button" aria-expanded="false" aria-controls="start-how">
               How to play
             </button>
-            <div class="start-audio">
-              <label class="vol-label">Volume
-                <input id="volume-slider" type="range" min="0" max="100" value="35" />
-              </label>
-              <label class="mute-label"><input id="mute-toggle" type="checkbox" /> Mute</label>
-            </div>
+            <button id="btn-settings-start" class="btn-text" type="button">Settings</button>
           </div>
         </div>
         <div id="start-how" class="start-how hidden" role="region" aria-label="Controls">
-          <p><kbd>WASD</kbd> Move · <kbd>Space</kbd> Jump · <kbd>Shift</kbd> Sprint</p>
-          <p><kbd>LMB</kbd> Shoot · <kbd>RMB hold</kbd> ADS · <kbd>RMB tap</kbd> Scope · <kbd>Scroll</kbd> Zoom</p>
-          <p><kbd>R</kbd> Reload · <kbd>E</kbd> Door / Medkit · <kbd>1</kbd>/<kbd>2</kbd> Weapons</p>
-          <p><kbd>Esc</kbd> Pause · <kbd>Tab</kbd> Scoreboard</p>
+          <div class="how-desktop">
+            <p><kbd>WASD</kbd> Move · <kbd>Space</kbd> Jump · <kbd>Shift</kbd> Sprint</p>
+            <p><kbd>LMB</kbd> Shoot · <kbd>RMB hold</kbd> ADS · <kbd>RMB tap</kbd> Scope · <kbd>Scroll</kbd> Zoom</p>
+            <p><kbd>R</kbd> Reload · <kbd>E</kbd> Door / Medkit · <kbd>1</kbd>/<kbd>2</kbd> Weapons</p>
+            <p><kbd>Esc</kbd> Pause · <kbd>Tab</kbd> Scoreboard</p>
+          </div>
+          <div class="how-touch">
+            <p>Left stick move (push forward to sprint) · Right side look</p>
+            <p><b>FIRE</b> shoot · <b>AIM</b> hold to aim, tap for scope</p>
+            <p><b>JUMP</b> · <b>R</b> reload · <b>USE</b> doors / medkits · <b>1</b>/<b>2</b> weapons</p>
+          </div>
         </div>
       </div>
 
@@ -171,6 +175,7 @@
         <div id="interact-prompt" class="hidden">Press <kbd>E</kbd> to open door</div>
 
         <div id="damage-numbers"></div>
+        <div id="headshot-callout" class="hidden">HEADSHOT!</div>
         <div id="streak-callout" class="hidden"></div>
         <div id="pickup-toast" class="hidden">+50 FUN</div>
         <div id="flag-carry" class="flag-carry hidden">⚑ YOU HAVE THE FLAG</div>
@@ -180,6 +185,27 @@
           <div class="mini-sb-title" id="mini-sb-title">SCOREBOARD · FIRST TO 20</div>
           <div id="mini-scoreboard-body" class="mini-sb-body"></div>
           <div class="mini-sb-hint">Hold Tab</div>
+        </div>
+
+        <div id="touch-controls" class="touch-controls hidden">
+          <div class="touch-zone touch-move" data-zone="move">
+            <div class="touch-stick">
+              <div class="touch-knob"></div>
+            </div>
+          </div>
+          <div class="touch-zone touch-look" data-zone="look"></div>
+          <button type="button" class="touch-btn touch-pause" data-touch="pause" aria-label="Pause">II</button>
+          <div class="touch-guns">
+            <button type="button" class="touch-btn touch-gun" data-touch="gun1">1</button>
+            <button type="button" class="touch-btn touch-gun" data-touch="gun2">2</button>
+          </div>
+          <div class="touch-actions">
+            <button type="button" class="touch-btn touch-use hidden" data-touch="use">USE</button>
+            <button type="button" class="touch-btn touch-reload" data-touch="reload">R</button>
+            <button type="button" class="touch-btn touch-jump" data-touch="jump">JUMP</button>
+            <button type="button" class="touch-btn touch-aim" data-touch="aim">AIM</button>
+            <button type="button" class="touch-btn touch-fire" data-touch="fire">FIRE</button>
+          </div>
         </div>
       </div>
 
@@ -197,24 +223,52 @@
       <div id="pause-overlay" class="overlay hidden">
         <div class="panel">
           <h2>PAUSED</h2>
-          <div class="settings-row">
-            <label class="vol-label">Volume
-              <input id="volume-slider-pause" type="range" min="0" max="100" value="35" />
-            </label>
-            <label class="mute-label"><input id="mute-toggle-pause" type="checkbox" /> Mute</label>
-          </div>
-          <div class="settings-row">
-            <label class="vol-label">Graphics
-              <select id="graphics-preset-select">
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="ultra">Ultra</option>
-              </select>
-            </label>
-          </div>
           <button id="btn-resume" class="btn btn-primary">RESUME</button>
+          <button id="btn-settings-pause" class="btn btn-secondary" type="button">SETTINGS</button>
           <button id="btn-restart" class="btn btn-secondary">RESTART</button>
+        </div>
+      </div>
+
+      <!-- Shared settings (start screen + pause) -->
+      <div id="settings-overlay" class="overlay settings-overlay hidden">
+        <div class="panel settings-panel">
+          <h2>SETTINGS</h2>
+          <label class="settings-field">
+            <span class="settings-label">Mouse sensitivity <em id="sens-mouse-val">100</em></span>
+            <span class="settings-hint">Mouse or finger — how fast you turn</span>
+            <input id="sens-mouse" type="range" min="25" max="200" step="5" value="100" />
+          </label>
+          <label class="settings-field settings-check">
+            <input id="sens-invert-y" type="checkbox" />
+            <span>
+              <span class="settings-label">Invert up / down</span>
+              <span class="settings-hint">Mouse up looks at the ground</span>
+            </span>
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">Aim sensitivity <em id="sens-ads-val">100</em></span>
+            <span class="settings-hint">Extra slow-down while aiming or using the scope</span>
+            <input id="sens-ads" type="range" min="25" max="200" step="5" value="100" />
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">Volume <em id="volume-val">35</em></span>
+            <input id="volume-slider" type="range" min="0" max="100" value="35" />
+          </label>
+          <label class="settings-field settings-check">
+            <input id="mute-toggle" type="checkbox" />
+            <span class="settings-label">Mute</span>
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">Graphics</span>
+            <span class="settings-hint">Lower this if the game stutters</span>
+            <select id="graphics-preset-select">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="ultra">Ultra</option>
+            </select>
+          </label>
+          <button id="btn-settings-back" class="btn btn-primary" type="button">BACK</button>
         </div>
       </div>
 
@@ -226,6 +280,10 @@
           <div id="scoreboard" class="scoreboard"></div>
           <button id="btn-rematch" class="btn btn-primary">REMATCH</button>
         </div>
+      </div>
+      <div id="rotate-hint" class="rotate-hint hidden">
+        <p>Turn your phone sideways</p>
+        <span>Landscape works best</span>
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>

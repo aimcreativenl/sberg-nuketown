@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { KILL_LIMIT, PLAYER_HEIGHT, PLAYER_MAX_HP } from '../game/constants.js';
+import { KILL_LIMIT, PLAYER_HEIGHT, PLAYER_MAX_HP, HEAD_HIT_RADIUS } from '../game/constants.js';
+import { pickVolumeHit } from '../game/hitscan.js';
 import { getModeById } from '../modes/registry.js';
 import { pickTeamSpawn, teamOutfitIndex, teamReachedLimit } from '../modes/tdm.js';
 import {
@@ -27,7 +28,6 @@ import { PoseHistory, clampRewindMs } from './PoseHistory.js';
 const FIRE_INTERVAL = 0.15;
 const DMG_BODY = 28;
 const SHOT_RANGE = 80;
-const HEAD_RADIUS = 0.24;
 const CHEST_RADIUS = 0.32;
 /** Fallback hard correct if reconcile history missing (metres XZ). */
 const CORRECT_DIST = 4.0;
@@ -488,15 +488,18 @@ export class MpMatch {
           : null;
 
       if (volumes?.length && !rewound) {
-        for (const vol of volumes) {
-          const hit =
-            vol.kind === 'capsule'
-              ? rayHitsCapsule(origin, dir, vol.a, vol.b, vol.radius)
-              : rayHitsSphere(origin, dir, vol.center, vol.radius);
-          if (!hit || hit.dist > bestDist || hit.dist < 0.05) continue;
-          if (ctx.shotBlocked?.(origin, hit.point)) continue;
-          best = { pawn: other, dist: hit.dist, headshot: !!vol.headshot, point: hit.point };
-          bestDist = hit.dist;
+        const head =
+          typeof avatarEntry.character.getHeadWorldPosition === 'function'
+            ? avatarEntry.character.getHeadWorldPosition()
+            : volumes.find((vol) => vol.headshot)?.center;
+        const picked = pickVolumeHit(origin, dir, bestDist, volumes, head, {
+          rayHitsSphere,
+          rayHitsCapsule,
+          shotBlocked: (from, to) => ctx.shotBlocked?.(from, to),
+        });
+        if (picked) {
+          best = { pawn: other, dist: picked.dist, headshot: picked.headshot, point: picked.point };
+          bestDist = picked.dist;
         }
         continue;
       }
@@ -505,16 +508,24 @@ export class MpMatch {
       const head = eye.clone();
       const chest = eye.clone();
       chest.y -= 0.45;
-
-      for (const [center, radius, headshot] of [
-        [head, HEAD_RADIUS, true],
-        [chest, CHEST_RADIUS, false],
-      ]) {
-        const hit = rayHitsSphere(origin, dir, center, radius);
-        if (!hit || hit.dist > bestDist || hit.dist < 0.05) continue;
-        if (ctx.shotBlocked?.(origin, hit.point)) continue;
-        best = { pawn: other, dist: hit.dist, headshot, point: hit.point };
-        bestDist = hit.dist;
+      const picked = pickVolumeHit(
+        origin,
+        dir,
+        bestDist,
+        [
+          { kind: 'sphere', center: head, radius: HEAD_HIT_RADIUS, headshot: true },
+          { kind: 'sphere', center: chest, radius: CHEST_RADIUS, headshot: false },
+        ],
+        head,
+        {
+          rayHitsSphere,
+          rayHitsCapsule,
+          shotBlocked: (from, to) => ctx.shotBlocked?.(from, to),
+        }
+      );
+      if (picked) {
+        best = { pawn: other, dist: picked.dist, headshot: picked.headshot, point: picked.point };
+        bestDist = picked.dist;
       }
     }
 

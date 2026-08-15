@@ -44,11 +44,14 @@
     "test:phase-a-feedback": "node scripts/check-phase-a-feedback.mjs",
     "test:phase-a-movement": "node scripts/check-phase-a-movement.mjs",
     "test:phase-a-weapons": "node scripts/check-phase-a-weapons.mjs",
+    "test:headshots": "node scripts/check-headshots.mjs",
     "test:phase-b-bots": "node scripts/check-phase-b-bots.mjs",
     "test:phase-c": "node scripts/check-phase-c-map.mjs",
     "test:phase-d-flow": "node scripts/check-phase-d-flow.mjs",
     "test:phase-d-audio": "node scripts/check-phase-d-audio.mjs",
-    "test:phase-d-hud": "node scripts/check-phase-d-hud.mjs"
+    "test:phase-d-hud": "node scripts/check-phase-d-hud.mjs",
+    "test:settings": "node scripts/check-settings.mjs",
+    "test:touch-play": "node scripts/check-touch-play.mjs"
   },
   "devDependencies": {
     "vite": "^8.2.0"

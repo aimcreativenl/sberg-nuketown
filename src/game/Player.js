@@ -11,9 +11,6 @@ import {
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
   PLAYER_MAX_HP,
-  MOUSE_SENS,
-  ADS_SENS_MULT,
-  SCOPE_SENS_MULT,
   USE_RAPIER_PLAYER,
 } from './constants.js';
 import {
@@ -24,6 +21,7 @@ import {
   isStepableSolid,
 } from './movement.js';
 import { playerMoveBlocked } from './collision.js';
+import { lookScale } from '../settings/Settings.js';
 
 export class Player {
   /** Max height the player can walk up without jumping (stairs / curbs / climb pads). */
@@ -77,6 +75,10 @@ export class Player {
     this.physics = null;
     /** Phase 1c: Rapier character controller handle from `physics.createPlayerController()`. */
     this._rapier = null;
+    /** ADS hold and/or scope — used by lookScale */
+    this._lookAim = false;
+    this._lookScope = false;
+    this._scopedLook = false;
   }
 
   /**
@@ -134,11 +136,14 @@ export class Player {
       this.keys.delete(e.code);
     };
     this._onMouseMove = (e) => {
+      if (this._touchPlay) return;
       if (document.pointerLockElement !== dom) return;
       this.mouse.dx += e.movementX;
       this.mouse.dy += e.movementY;
     };
     this._onMouseDown = (e) => {
+      if (this._touchPlay) return;
+      if (e.sourceCapabilities?.firesTouchEvents) return;
       if (e.button === 0) {
         this.buttons.left = true;
         // Buffer click so semi-auto never eats a press during cooldown / frame gap
@@ -150,6 +155,7 @@ export class Player {
       }
     };
     this._onMouseUp = (e) => {
+      if (this._touchPlay) return;
       if (e.button === 0) this.buttons.left = false;
       if (e.button === 2) {
         this.buttons.right = false;
@@ -160,6 +166,7 @@ export class Player {
     };
     this._onContext = (e) => e.preventDefault();
     this._onWheel = (e) => {
+      if (this._touchPlay) return;
       if (document.pointerLockElement !== dom) return;
       e.preventDefault();
       this.scopeZoomDelta += Math.sign(e.deltaY || 0);
@@ -214,10 +221,12 @@ export class Player {
     this.reset(spawn);
   }
 
-  updateLook(scoped = false) {
-    const sens = MOUSE_SENS * (scoped ? SCOPE_SENS_MULT : 1);
-    this.yaw -= this.mouse.dx * sens;
-    this.pitch -= this.mouse.dy * sens;
+  updateLook(aiming = false) {
+    const ads = !!aiming || !!this._lookAim || !!this._scopedLook;
+    const scoped = !!this._lookScope;
+    const { yawScale, pitchScale } = lookScale({ aiming: ads, scoped });
+    this.yaw -= this.mouse.dx * yawScale;
+    this.pitch -= this.mouse.dy * pitchScale;
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
     this.mouse.dx = 0;
     this.mouse.dy = 0;
@@ -257,8 +266,8 @@ export class Player {
       this.health = Math.min(this.maxHealth, this.health + 2 * dt);
     }
 
-    // Look sensitivity: extra slow when weapons report scoped
-    this.updateLook(!!this._scopedLook);
+    // Look sensitivity (hip vs ADS/scope + invert Y live from Settings)
+    this.updateLook();
 
     const sprint = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     const speed = sprint ? PLAYER_SPRINT : PLAYER_SPEED;

@@ -50,6 +50,7 @@ for (const [name, part] of [
 const volumes = character.getHitVolumes();
 const headshots = volumes.filter((volume) => volume.headshot === true);
 assert(headshots.length === 1, `exactly one headshot volume (got ${headshots.length})`);
+assert(headshots[0].radius >= 0.34, `head sphere covers visual cube corners (got ${headshots[0].radius})`);
 assert(volumes.length > 1, 'body and limb hit volumes exist');
 assert(
   volumes.filter((volume) => volume !== headshots[0]).every((volume) => volume.headshot !== true),
