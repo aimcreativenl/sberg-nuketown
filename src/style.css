@@ -1506,6 +1506,16 @@ kbd {
   text-align: left;
   min-width: min(26rem, 92vw);
   max-width: 28rem;
+  max-height: min(88vh, 42rem);
+  overflow-y: auto;
+}
+
+.settings-touch-only {
+  display: none;
+}
+
+html.touch-play .settings-touch-only {
+  display: block;
 }
 
 .settings-panel h2 {
@@ -1831,8 +1841,9 @@ html.touch-play .how-touch {
 
 .touch-guns {
   position: absolute;
-  top: calc(10px + env(safe-area-inset-top, 0px));
   left: calc(10px + env(safe-area-inset-left, 0px));
+  bottom: calc(30% + env(safe-area-inset-bottom, 0px));
+  top: auto;
   display: flex;
   gap: 8px;
   z-index: 2;
@@ -1843,15 +1854,40 @@ html.touch-play .how-touch {
   height: 44px;
 }
 
+.touch-fire-left {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  width: 76px;
+  height: 76px;
+  font-size: 0.82rem;
+  z-index: 3;
+  background: rgba(255, 158, 184, 0.72);
+  border-color: rgba(255, 227, 168, 0.55);
+}
+
+.touch-actions-top {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  right: calc(58px + env(safe-area-inset-right, 0px));
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.touch-actions-top .touch-btn {
+  pointer-events: auto;
+}
+
 .touch-actions {
   position: absolute;
   right: calc(12px + env(safe-area-inset-right, 0px));
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   display: grid;
   grid-template-columns: auto auto auto;
-  grid-template-areas:
-    'use reload jump'
-    '. aim fire';
+  grid-template-areas: 'use reload jump';
   gap: 10px;
   align-items: end;
   z-index: 2;
@@ -1865,9 +1901,8 @@ html.touch-play .how-touch {
 .touch-use { grid-area: use; min-width: 64px; height: 48px; font-size: 0.78rem; }
 .touch-reload { grid-area: reload; width: 52px; height: 52px; }
 .touch-jump { grid-area: jump; min-width: 70px; height: 52px; font-size: 0.78rem; }
-.touch-aim { grid-area: aim; min-width: 70px; height: 64px; background: rgba(197, 180, 227, 0.45); }
-.touch-fire {
-  grid-area: fire;
+.touch-aim { min-width: 70px; height: 64px; background: rgba(197, 180, 227, 0.45); }
+.touch-fire-right {
   width: 86px;
   height: 86px;
   font-size: 0.95rem;

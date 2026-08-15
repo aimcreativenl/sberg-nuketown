@@ -31,6 +31,7 @@ import { GFX } from './materials.js';
 import { getSettings, setGraphicsPreset, patchSettings, applyToGame } from '../settings/Settings.js';
 import { isTouchPlay, isTouchPortrait } from '../input/detectPlayMode.js';
 import { TouchControls } from '../input/TouchControls.js';
+import { GyroLook } from '../input/GyroLook.js';
 import { MenuCamera } from './MenuCamera.js';
 import {
   playerMoveBlocked,
@@ -159,12 +160,17 @@ export class Game {
       document.documentElement.classList.toggle('touch-play', this.touchPlay);
     }
     this.player.bindInput(canvas);
+    this.gyro = new GyroLook();
+    this.player.gyroLook = this.gyro;
     this.touch = new TouchControls({
       player: this.player,
       root: typeof document !== 'undefined' ? document.getElementById('touch-controls') : null,
       rotate: typeof document !== 'undefined' ? document.getElementById('rotate-hint') : null,
       onPause: () => this.pause(),
-      onUnlock: () => this.audio.unlock(),
+      onUnlock: () => {
+        this.audio.unlock();
+        this._syncGyroLook();
+      },
     });
     this._syncTouchChrome();
 
@@ -1073,20 +1079,30 @@ export class Game {
       const mouse = document.getElementById('sens-mouse');
       const ads = document.getElementById('sens-ads');
       const invert = document.getElementById('sens-invert-y');
+      const touch = document.getElementById('sens-touch');
+      const gyroMode = document.getElementById('gyro-mode');
+      const gyroSens = document.getElementById('sens-gyro');
       const vol = document.getElementById('volume-slider');
       const mute = document.getElementById('mute-toggle');
       const gfx = document.getElementById('graphics-preset-select');
       if (mouse) mouse.value = pct(s.mouseSens);
       if (ads) ads.value = pct(s.adsSens);
       if (invert) invert.checked = !!s.invertY;
+      if (touch) touch.value = pct(s.touchSens);
+      if (gyroMode) gyroMode.value = s.gyroMode;
+      if (gyroSens) gyroSens.value = pct(s.gyroSens);
       if (vol) vol.value = pct(s.volume);
       if (mute) mute.checked = !!s.muted;
       if (gfx) gfx.value = s.graphicsPreset;
       const mouseVal = document.getElementById('sens-mouse-val');
       const adsVal = document.getElementById('sens-ads-val');
+      const touchVal = document.getElementById('sens-touch-val');
+      const gyroVal = document.getElementById('sens-gyro-val');
       const volVal = document.getElementById('volume-val');
       if (mouseVal) mouseVal.textContent = pct(s.mouseSens);
       if (adsVal) adsVal.textContent = pct(s.adsSens);
+      if (touchVal) touchVal.textContent = pct(s.touchSens);
+      if (gyroVal) gyroVal.textContent = pct(s.gyroSens);
       if (volVal) volVal.textContent = pct(s.volume);
     };
 
@@ -1099,16 +1115,26 @@ export class Game {
       const mouseEl = document.getElementById('sens-mouse');
       const adsEl = document.getElementById('sens-ads');
       const invertEl = document.getElementById('sens-invert-y');
+      const touchEl = document.getElementById('sens-touch');
+      const gyroModeEl = document.getElementById('gyro-mode');
+      const gyroSensEl = document.getElementById('sens-gyro');
       patchSettings({
         mouseSens: Number(mouseEl?.value || 100) / 100,
         adsSens: Number(adsEl?.value || 100) / 100,
         invertY: !!invertEl?.checked,
+        touchSens: Number(touchEl?.value || 100) / 100,
+        gyroMode: gyroModeEl?.value || 'off',
+        gyroSens: Number(gyroSensEl?.value || 100) / 100,
       });
       fillFromStore();
+      this._syncGyroLook();
     };
     document.getElementById('sens-mouse')?.addEventListener('input', onSens);
     document.getElementById('sens-ads')?.addEventListener('input', onSens);
     document.getElementById('sens-invert-y')?.addEventListener('change', onSens);
+    document.getElementById('sens-touch')?.addEventListener('input', onSens);
+    document.getElementById('gyro-mode')?.addEventListener('change', onSens);
+    document.getElementById('sens-gyro')?.addEventListener('input', onSens);
 
     document.getElementById('volume-slider')?.addEventListener('input', (e) => {
       const v = Number(e.target.value) / 100;
@@ -1985,6 +2011,16 @@ export class Game {
     const live = this.touchPlay && this.running && !this.paused && !this.matchOver && !portrait;
     if (live) this.touch.show();
     else this.touch.hide();
+    this._syncGyroLook();
+  }
+
+  _syncGyroLook() {
+    if (!this.gyro) return;
+    const portrait = !!this.touchPlay && isTouchPortrait();
+    const live = this.touchPlay && this.running && !this.paused && !this.matchOver && !portrait;
+    const wanted = live && getSettings().gyroMode !== 'off';
+    if (wanted) void this.gyro.start();
+    else this.gyro.stop();
   }
 
   _resize() {

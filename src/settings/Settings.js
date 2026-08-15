@@ -2,7 +2,8 @@
  * User settings: graphics presets + look/audio prefs.
  * Persisted to localStorage. applyToGame() never throws.
  */
-import { MOUSE_SENS, SCOPE_SENS_MULT } from '../game/constants.js';
+import { MOUSE_SENS, SCOPE_SENS_MULT, TOUCH_LOOK_MULT } from '../game/constants.js';
+import { GYRO_MODES } from '../input/GyroLook.js';
 
 const STORAGE_KEY = 'sberg-settings-v1';
 
@@ -46,6 +47,9 @@ function defaultSettings() {
     mouseSens: 1,
     adsSens: 1,
     invertY: false,
+    touchSens: 1,
+    gyroMode: 'always',
+    gyroSens: 1,
     volume: DEFAULT_VOLUME,
     muted: false,
   };
@@ -59,6 +63,9 @@ function normalizeSettings(raw = {}) {
     mouseSens: clamp(raw.mouseSens ?? d.mouseSens, SENS_MIN, SENS_MAX),
     adsSens: clamp(raw.adsSens ?? d.adsSens, SENS_MIN, SENS_MAX),
     invertY: !!raw.invertY,
+    touchSens: clamp(raw.touchSens ?? d.touchSens, SENS_MIN, SENS_MAX),
+    gyroMode: GYRO_MODES.includes(raw.gyroMode) ? raw.gyroMode : d.gyroMode,
+    gyroSens: clamp(raw.gyroSens ?? d.gyroSens, SENS_MIN, SENS_MAX),
     volume: clamp(raw.volume ?? d.volume, 0, 1),
     muted: !!raw.muted,
   };
@@ -122,12 +129,15 @@ export function getGraphicsPreset() {
 /**
  * Yaw/pitch scales for one look frame. invertY flips pitch only.
  * Aiming (ADS hold or scope) uses the existing scope multiplier so 100% feels like today.
- * @param {{ aiming?: boolean, scoped?: boolean }} pose
+ * Touch uses a separate (much higher) camera scale — PUBG/COD do not share mouse units.
+ * @param {{ aiming?: boolean, scoped?: boolean, touch?: boolean }} pose
  * @param {ReturnType<typeof getSettings>} [settings]
  */
 export function lookScale(pose = {}, settings = getSettings()) {
   const aiming = !!(pose.aiming || pose.scoped);
-  const hip = MOUSE_SENS * settings.mouseSens;
+  const hip = pose.touch
+    ? MOUSE_SENS * TOUCH_LOOK_MULT * settings.touchSens
+    : MOUSE_SENS * settings.mouseSens;
   const scale = hip * (aiming ? SCOPE_SENS_MULT * settings.adsSens : 1);
   return {
     yawScale: scale,

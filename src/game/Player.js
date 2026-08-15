@@ -21,7 +21,8 @@ import {
   isStepableSolid,
 } from './movement.js';
 import { playerMoveBlocked } from './collision.js';
-import { lookScale } from '../settings/Settings.js';
+import { getSettings, lookScale } from '../settings/Settings.js';
+import { gyroLookActive } from '../input/GyroLook.js';
 
 export class Player {
   /** Max height the player can walk up without jumping (stairs / curbs / climb pads). */
@@ -221,12 +222,27 @@ export class Player {
     this.reset(spawn);
   }
 
-  updateLook(aiming = false) {
+  updateLook(aiming = false, dt = 0) {
     const ads = !!aiming || !!this._lookAim || !!this._scopedLook;
     const scoped = !!this._lookScope;
-    const { yawScale, pitchScale } = lookScale({ aiming: ads, scoped });
+    const settings = getSettings();
+    const { yawScale, pitchScale } = lookScale(
+      { aiming: ads, scoped, touch: !!this._touchPlay },
+      settings
+    );
     this.yaw -= this.mouse.dx * yawScale;
     this.pitch -= this.mouse.dy * pitchScale;
+    const gyro = this.gyroLook;
+    if (
+      gyro?.active &&
+      this._touchPlay &&
+      dt > 0 &&
+      gyroLookActive(settings.gyroMode, ads)
+    ) {
+      const g = settings.gyroSens;
+      this.yaw -= gyro.yawRate * dt * g;
+      this.pitch -= gyro.pitchRate * dt * g * (settings.invertY ? -1 : 1);
+    }
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
     this.mouse.dx = 0;
     this.mouse.dy = 0;
@@ -267,7 +283,7 @@ export class Player {
     }
 
     // Look sensitivity (hip vs ADS/scope + invert Y live from Settings)
-    this.updateLook();
+    this.updateLook(false, dt);
 
     const sprint = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     const speed = sprint ? PLAYER_SPRINT : PLAYER_SPEED;

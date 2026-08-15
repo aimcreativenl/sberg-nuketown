@@ -2,11 +2,11 @@
  * On-screen FPS controls: left move stick, right look pad, fire/aim/jump.
  * Writes into the same Player keys/buttons the desktop path uses.
  */
+import { TOUCH_LOOK_PIXEL } from '../game/constants.js';
 
 const DEAD = 0.18;
 const DIR = 0.28;
 const SPRINT_MAG = 0.78;
-const LOOK_PIXEL = 1.25;
 const AIM_TAP_MS = 220;
 
 /**
@@ -53,7 +53,7 @@ export class TouchControls {
     this._touchKeys = new Set();
     this._moveId = null;
     this._lookId = null;
-    this._fireId = null;
+    this._fireIds = new Set();
     this._aimId = null;
     this._jumpId = null;
     this._moveOrigin = { x: 0, y: 0 };
@@ -99,7 +99,7 @@ export class TouchControls {
   reset() {
     this._moveId = null;
     this._lookId = null;
-    this._fireId = null;
+    this._fireIds.clear();
     this._aimId = null;
     this._jumpId = null;
     this._clearTouchKeys();
@@ -163,7 +163,7 @@ export class TouchControls {
     }
     if (action === 'fire') {
       e.preventDefault();
-      this._fireId = e.pointerId;
+      this._fireIds.add(e.pointerId);
       try {
         e.target.closest('[data-touch="fire"]')?.setPointerCapture?.(e.pointerId);
       } catch (_) {}
@@ -254,8 +254,8 @@ export class TouchControls {
       const dy = e.clientY - this._lookLast.y;
       this._lookLast.x = e.clientX;
       this._lookLast.y = e.clientY;
-      this.player.mouse.dx += dx * LOOK_PIXEL;
-      this.player.mouse.dy += dy * LOOK_PIXEL;
+      this.player.mouse.dx += dx * TOUCH_LOOK_PIXEL;
+      this.player.mouse.dy += dy * TOUCH_LOOK_PIXEL;
     }
   }
 
@@ -269,9 +269,9 @@ export class TouchControls {
     if (e.pointerId === this._lookId) {
       this._lookId = null;
     }
-    if (e.pointerId === this._fireId) {
-      this._fireId = null;
-      this.player.buttons.left = false;
+    if (this._fireIds.has(e.pointerId)) {
+      this._fireIds.delete(e.pointerId);
+      this.player.buttons.left = this._fireIds.size > 0;
     }
     if (e.pointerId === this._aimId) {
       this._aimId = null;

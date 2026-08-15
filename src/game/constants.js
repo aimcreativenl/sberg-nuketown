@@ -25,6 +25,10 @@ export const BOT_COUNT = 9;
 export const MOUSE_SENS = 0.0022;
 export const ADS_SENS_MULT = 0.55;
 export const SCOPE_SENS_MULT = 0.28;
+/** Touch look pad: same pixel→mouse units as desktop, then scaled by TOUCH_LOOK_MULT. */
+export const TOUCH_LOOK_PIXEL = 1.25;
+/** ~180° yaw for a 100px swipe at 100% touch sensitivity (PUBG/COD camera feel). */
+export const TOUCH_LOOK_MULT = Math.PI / (100 * TOUCH_LOOK_PIXEL * MOUSE_SENS);
 export const SCOPE_FOV = 22;
 
 /** Phase 1: Rapier-backed player capsule + character controller (Player.js falls back to legacy AABB movement if physics isn't ready). */

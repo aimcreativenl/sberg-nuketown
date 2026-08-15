@@ -3,6 +3,7 @@
  */
 import { isTouchPlay, isTouchPortrait } from '../src/input/detectPlayMode.js';
 import { joystickToKeys } from '../src/input/TouchControls.js';
+import { gyroLookActive, motionToLookRates, screenOrientationAngle } from '../src/input/GyroLook.js';
 
 const failures = [];
 function assert(cond, msg) {
@@ -80,6 +81,21 @@ assert(left.KeyA === true, 'left strafe');
 
 const diag = joystickToKeys(0.7, -0.7);
 assert(diag.KeyW && diag.KeyD, 'forward-right diagonal');
+
+assert(gyroLookActive('off', true) === false, 'gyro off is never active');
+assert(gyroLookActive('ads', false) === false, 'gyro ads is off at hip');
+assert(gyroLookActive('ads', true) === true, 'gyro ads is on while aiming');
+assert(gyroLookActive('always', false) === true, 'gyro always is on at hip');
+
+const landscape = motionToLookRates({ alpha: 0, beta: 180, gamma: 0 }, 90);
+assert(Math.abs(landscape.yawRate - Math.PI) < 1e-9, `landscape 90: +beta is yaw (got ${landscape.yawRate})`);
+assert(Math.abs(landscape.pitchRate) < 1e-12, 'landscape 90: zero gamma is zero pitch');
+
+const portrait = motionToLookRates({ alpha: 0, beta: 0, gamma: 180 }, 0);
+assert(Math.abs(portrait.yawRate - Math.PI) < 1e-9, 'portrait: +gamma is yaw');
+
+assert(screenOrientationAngle({ orientation: { angle: 90 } }) === 90, 'screen.orientation.angle');
+assert(screenOrientationAngle({}, { orientation: -90 }) === 270, 'window.orientation -90 wraps to 270');
 
 const report = { ok: failures.length === 0, failures };
 console.log(JSON.stringify(report, null, 2));
