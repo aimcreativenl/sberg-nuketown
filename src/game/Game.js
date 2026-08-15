@@ -172,6 +172,7 @@ export class Game {
         this._syncGyroLook();
       },
     });
+    this._bindWeaponBannerSwap();
     this._syncTouchChrome();
 
     this.weapons = new WeaponController(this.camera, this.scene, this.audio, this.particles);
@@ -2002,6 +2003,23 @@ export class Game {
 
   _useVerb() {
     return this.touchPlay ? 'Tap USE' : 'Press E';
+  }
+
+  _bindWeaponBannerSwap() {
+    const banner = typeof document !== 'undefined' ? document.getElementById('weapon-banner') : null;
+    if (!banner) return;
+    banner.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (!this.touchPlay || !this.running || this.paused || this.matchOver) return;
+        if (!this.player?.alive) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const cur = this.weapons?.slot ?? 0;
+        this.player.weaponSlotPressed = cur === 0 ? 1 : 0;
+      },
+      { passive: false }
+    );
   }
 
   _syncTouchChrome() {

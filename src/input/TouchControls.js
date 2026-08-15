@@ -10,6 +10,15 @@ const SPRINT_MAG = 0.78;
 const AIM_TAP_MS = 220;
 
 /**
+ * FIRE also drives look when no other look finger is down (2-thumb).
+ * @param {number|null} lookId
+ * @param {number} firePointerId
+ */
+export function lookIdAfterFireDown(lookId, firePointerId) {
+  return lookId == null ? firePointerId : lookId;
+}
+
+/**
  * @param {number} nx -1..1 (right positive)
  * @param {number} ny -1..1 (up negative, screen space)
  */
@@ -169,6 +178,7 @@ export class TouchControls {
       } catch (_) {}
       this.player.buttons.left = true;
       this.player.shootClicks = Math.min(3, (this.player.shootClicks || 0) + 1);
+      this._beginLook(lookIdAfterFireDown(this._lookId, e.pointerId), e.clientX, e.clientY);
       return;
     }
     if (action === 'aim') {
@@ -194,17 +204,6 @@ export class TouchControls {
       this.player.usePressed = true;
       return;
     }
-    if (action === 'gun1') {
-      e.preventDefault();
-      this.player.weaponSlotPressed = 0;
-      return;
-    }
-    if (action === 'gun2') {
-      e.preventDefault();
-      this.player.weaponSlotPressed = 1;
-      return;
-    }
-
     const zone = e.target?.closest?.('[data-zone]');
     const zoneName = zone?.getAttribute('data-zone');
     if (zoneName === 'move' && this._moveId == null) {
@@ -218,10 +217,15 @@ export class TouchControls {
     }
     if (zoneName === 'look' && this._lookId == null) {
       e.preventDefault();
-      this._lookId = e.pointerId;
-      this._lookLast.x = e.clientX;
-      this._lookLast.y = e.clientY;
+      this._beginLook(e.pointerId, e.clientX, e.clientY);
     }
+  }
+
+  _beginLook(id, x, y) {
+    if (this._lookId != null || id == null) return;
+    this._lookId = id;
+    this._lookLast.x = x;
+    this._lookLast.y = y;
   }
 
   _placeStickBase(x, y) {

@@ -1,8 +1,11 @@
 /**
  * Desktop vs touch-play detection, plus joystick → WASD mapping.
  */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { isTouchPlay, isTouchPortrait } from '../src/input/detectPlayMode.js';
-import { joystickToKeys } from '../src/input/TouchControls.js';
+import { joystickToKeys, lookIdAfterFireDown } from '../src/input/TouchControls.js';
 import { gyroLookActive, motionToLookRates, screenOrientationAngle } from '../src/input/GyroLook.js';
 
 const failures = [];
@@ -96,6 +99,16 @@ assert(Math.abs(portrait.yawRate - Math.PI) < 1e-9, 'portrait: +gamma is yaw');
 
 assert(screenOrientationAngle({ orientation: { angle: 90 } }) === 90, 'screen.orientation.angle');
 assert(screenOrientationAngle({}, { orientation: -90 }) === 270, 'window.orientation -90 wraps to 270');
+
+assert(lookIdAfterFireDown(null, 7) === 7, 'FIRE starts look when the look pad is free');
+assert(lookIdAfterFireDown(3, 7) === 3, 'FIRE does not steal an existing look finger');
+
+const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../index.html'), 'utf8');
+const fireBtns = html.match(/data-touch="fire"/g) || [];
+assert(fireBtns.length === 1, `exactly one FIRE button (got ${fireBtns.length})`);
+assert(!html.includes('data-touch="gun1"') && !html.includes('data-touch="gun2"'), 'weapon 1/2 buttons are off the stick');
+assert(!html.includes('touch-fire-left'), 'no left claw FIRE');
+assert(html.includes('id="weapon-banner"'), 'weapon banner remains for tap-to-swap');
 
 const report = { ok: failures.length === 0, failures };
 console.log(JSON.stringify(report, null, 2));
