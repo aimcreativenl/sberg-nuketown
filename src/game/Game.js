@@ -53,6 +53,7 @@ import {
   DONUT_FUN_POINTS,
   PLAYER_HEIGHT,
   HEAD_HIT_RADIUS,
+  VIEWMODEL_LAYER,
 } from './constants.js';
 import { pickVolumeHit } from './hitscan.js';
 import { OnlineSession } from '../net/OnlineSession.js';
@@ -430,6 +431,10 @@ export class Game {
     bounce.position.set(0, -8, 0);
     this.scene.add(bounce);
 
+    this.scene.traverse((obj) => {
+      if (obj.isLight) obj.layers.enable(VIEWMODEL_LAYER);
+    });
+
     this._initPostProcess();
   }
 
@@ -498,6 +503,7 @@ export class Game {
       }
       this.startMatch();
     });
+    document.getElementById('btn-menu-pause')?.addEventListener('click', () => this.returnToMainMenu());
     document.getElementById('btn-rematch')?.addEventListener('click', () => {
       if (this.mpMatch || this._mpActive) {
         this.cancelMultiplayer();
@@ -1234,6 +1240,38 @@ export class Game {
     this.clock.getDelta();
   }
 
+  /** Leave the current match (offline or MP) and show the start screen. */
+  returnToMainMenu() {
+    this.audio.playUI();
+    this.paused = false;
+    this.running = false;
+    this.matchOver = false;
+    this.matchFlow = endMatch(this.matchFlow || createMatchFlow());
+    this._tabScoreboard = false;
+    this.ui.showMiniScoreboard(null, false);
+    this.ui.setFlagCarry?.(false);
+    this.ui.hideDeath();
+    this.ui.hideVictory();
+    this.ui.showPause(false);
+    this.ui.hideMatchCallout();
+    this.ui.hideSettings();
+    document.exitPointerLock?.();
+
+    this._mpActive = false;
+    this._resetMpSession();
+    this.ui.hideJoin();
+    this.ui.hideLobby();
+
+    this.bots?.clear();
+    this.donuts?.clear();
+    this._disposeFlags();
+    this._disposeZone();
+
+    this.ui.showStart();
+    this._enterMenu();
+    this._syncTouchChrome();
+  }
+
   _playerSpawn() {
     const pts = this.mapData.spawnPoints || [];
     if (!pts.length) return new THREE.Vector3(0, PLAYER_HEIGHT, 8);
@@ -1345,11 +1383,7 @@ export class Game {
       this.particles.update(dt * 0.5);
     }
 
-    if (this._postEnabled && this.composer) {
-      this.composer.render();
-    } else {
-      this.renderer.render(this.scene, this.camera);
-    }
+    this._renderWorldAndViewmodel();
   }
 
   _update(dt) {
@@ -2039,6 +2073,43 @@ export class Game {
     const wanted = live && getSettings().gyroMode !== 'off';
     if (wanted) void this.gyro.start();
     else this.gyro.stop();
+  }
+
+  /**
+   * World + bloom first (layer 0). Then the FP gun on a cleared depth buffer
+   * so bloom from bright fences cannot bleed through the weapon, and walls
+   * cannot clip the viewmodel.
+   */
+  _renderWorldAndViewmodel() {
+    const cam = this.camera;
+    cam.layers.set(0);
+
+    if (this._postEnabled && this.composer) {
+      this.composer.render();
+    } else {
+      this.renderer.autoClear = true;
+      this.renderer.render(this.scene, cam);
+    }
+
+    const vm = this.weapons?.viewModel;
+    if (vm?.visible) {
+      cam.layers.set(VIEWMODEL_LAYER);
+      const prevShadow = this.renderer.shadowMap.enabled;
+      const prevBackground = this.scene.background;
+      const prevFog = this.scene.fog;
+      this.renderer.shadowMap.enabled = false;
+      this.scene.background = null;
+      this.scene.fog = null;
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.scene, cam);
+      this.scene.background = prevBackground;
+      this.scene.fog = prevFog;
+      this.renderer.autoClear = true;
+      this.renderer.shadowMap.enabled = prevShadow;
+    }
+
+    cam.layers.set(0);
   }
 
   _resize() {

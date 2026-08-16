@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { roundedBoxGeo } from './softGeo.js';
+import { VIEWMODEL_LAYER } from './constants.js';
 
 /** Player loadout (hotkeys 1 / 2) — Phase A light TTK (snappier than sponge) */
 export const LOADOUT = [
@@ -119,7 +120,7 @@ function vmMat(color, kind = 'plastic') {
   const key = `${kind}_${(color >>> 0).toString(16)}`;
   let m = _vmMatCache.get(key);
   if (m) return m;
-  // MeshStandard for light response; still drawn over world (depthTest off in _setViewModel)
+  // MeshStandard for light response. Overlay pass (layer 1) draws after bloom.
   const presets = {
     plastic: { roughness: 0.62, metalness: 0.06 },
     metal: { roughness: 0.28, metalness: 0.72 },
@@ -134,9 +135,12 @@ function vmMat(color, kind = 'plastic') {
     roughness: p.roughness,
     metalness: p.metalness,
     flatShading: false,
-    depthTest: false,
-    depthWrite: false,
-    toneMapped: false,
+    depthTest: true,
+    depthWrite: true,
+    transparent: false,
+    opacity: 1,
+    fog: false,
+    toneMapped: true,
   });
   m.userData.shared = true;
   m.name = `vm_${kind}`;
@@ -167,7 +171,7 @@ function box(w, h, d, color, x = 0, y = 0, z = 0, kind = 'plastic') {
   const m = new THREE.Mesh(vmGeo(w, h, d), vmMat(color, kind));
   m.position.set(x, y, z);
   m.frustumCulled = false;
-  m.renderOrder = 9999;
+  m.renderOrder = 10;
   return m;
 }
 
@@ -175,7 +179,7 @@ function cylinder(radius, length, color, x = 0, y = 0, z = 0, kind = 'metal') {
   const m = new THREE.Mesh(vmCylinderGeo(radius, length), vmMat(color, kind));
   m.position.set(x, y, z);
   m.frustumCulled = false;
-  m.renderOrder = 9999;
+  m.renderOrder = 10;
   return m;
 }
 
@@ -329,6 +333,8 @@ export function buildViewModel(def) {
   const mag = root.getObjectByName('mag');
   if (mag) root.userData.magRest = mag.position.clone();
 
+  root.layers.set(VIEWMODEL_LAYER);
+  root.traverse((c) => c.layers.set(VIEWMODEL_LAYER));
   return root;
 }
 
@@ -404,15 +410,19 @@ export class WeaponController {
     this.viewModel.position.copy(this.hipPos);
     this.viewModel.rotation.copy(this.hipRot);
     this.viewModel.scale.setScalar(this.viewScale);
-    this.viewModel.renderOrder = 9999;
+    this.viewModel.renderOrder = 10;
     this.viewModel.frustumCulled = false;
+    this.viewModel.layers.set(VIEWMODEL_LAYER);
     this.viewModel.traverse((c) => {
+      c.layers.set(VIEWMODEL_LAYER);
       c.frustumCulled = false;
-      c.renderOrder = 9999;
       if (c.material) {
-        c.material.depthTest = false;
-        c.material.depthWrite = false;
-        c.material.toneMapped = false;
+        c.material.depthTest = true;
+        c.material.depthWrite = true;
+        c.material.transparent = false;
+        c.material.opacity = 1;
+        c.material.fog = false;
+        c.material.toneMapped = true;
       }
     });
     this.camera.add(this.viewModel);

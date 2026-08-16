@@ -24,11 +24,16 @@ assert(html.includes('9 AI') || html.includes('AI Bots'), 'AI bots mentioned');
 assert(!html.includes('Weapon Upgrades') || html.includes('1 Pistol'), 'no false upgrades-only pitch');
 assert(html.includes('volume-slider') || html.includes('Volume'), 'volume control in HTML');
 assert(html.includes('btn-settings-start'), 'Settings on start screen');
+assert(html.includes('btn-host') && html.includes('Host Server'), 'Host Server on start screen');
+assert(html.includes('btn-search') && html.includes('Join Server'), 'Join Server on start screen');
+assert(html.includes('class="btn-menu"') || html.includes('btn-menu '), 'start menu options are buttons');
 assert(html.includes('touch-controls'), 'touch control overlay');
 assert(html.includes('rotate-hint'), 'portrait rotate hint');
 assert(gameSrc.includes('isTouchPlay'), 'Game detects touch play');
 assert(gameSrc.includes('_syncTouchChrome'), 'Game syncs touch chrome');
 assert(html.includes('btn-settings-pause'), 'Settings on pause screen');
+assert(html.includes('btn-menu-pause') && html.includes('MAIN MENU'), 'Main Menu on pause screen');
+assert(gameSrc.includes('returnToMainMenu'), 'pause can return to start screen');
 assert(html.includes('settings-overlay'), 'shared settings overlay');
 assert(html.includes('Mouse sensitivity'), 'mouse sensitivity control');
 assert(html.includes('Aim sensitivity'), 'ADS/scope sensitivity control');
@@ -36,6 +41,8 @@ assert(html.includes('Invert up'), 'invert Y control');
 assert(html.includes('death-title'), 'death-title element');
 assert(html.includes('HEADSHOT!'), 'HEADSHOT callout in HUD');
 assert(html.includes('SBARG') || html.includes('NUKETOWN'), 'title branding');
+assert(!html.includes('sberg-nuketown-keyart.png'), 'start screen does not embed key art image');
+assert(html.includes("S'BERG"), 'start screen wordmark');
 
 // UI helpers
 assert(uiSrc.includes('showMatchCallout'), 'showMatchCallout');

@@ -22,7 +22,10 @@ for (const weaponId of ['pistol', 'm16']) {
   const viewModel = buildViewModel(def);
   const parts = meshes(viewModel);
 
-  assert(parts.length > 0, `${weaponId}: viewmodel contains meshes`);
+  assert(
+    parts.every((mesh) => mesh.material?.depthWrite === true && mesh.material?.transparent !== true),
+    `${weaponId}: viewmodel materials are opaque and write depth`
+  );
   assert(
     parts.every((mesh) => mesh.geometry?.type !== 'BoxGeometry'),
     `${weaponId}: major viewmodel meshes are not raw BoxGeometry`

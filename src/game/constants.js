@@ -31,6 +31,9 @@ export const TOUCH_LOOK_PIXEL = 1.25;
 export const TOUCH_LOOK_MULT = Math.PI / (100 * TOUCH_LOOK_PIXEL * MOUSE_SENS);
 export const SCOPE_FOV = 22;
 
+/** First-person gun/hands — world stays on layer 0; overlay pass uses this. */
+export const VIEWMODEL_LAYER = 1;
+
 /** Phase 1: Rapier-backed player capsule + character controller (Player.js falls back to legacy AABB movement if physics isn't ready). */
 export const USE_RAPIER_PLAYER = true;
 

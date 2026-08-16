@@ -33,6 +33,7 @@ export class MenuCamera {
 
   start() {
     this.active = true;
+    this.t = 0;
     this.camera.fov = this.menuFov;
     this.camera.updateProjectionMatrix();
     this._apply(0);
@@ -63,8 +64,26 @@ export class MenuCamera {
     const y = this.height + bob;
     this.camera.position.set(x, y, z);
     this._look.set(this.center.x, this.lookY + Math.sin(t * 0.35) * 0.25, this.center.z);
-    this.camera.lookAt(this._look);
-    // Keep roll neutral after lookAt
-    this.camera.rotation.z = 0;
+    applyUprightLook(this.camera, this.camera.position, this._look);
   }
+}
+
+/**
+ * Aim the camera at `target` with world-up and zero roll.
+ * Avoids lookAt + Euler.z = 0, which can start 180° inverted then unwind.
+ *
+ * @param {THREE.Object3D} camera
+ * @param {THREE.Vector3} from
+ * @param {THREE.Vector3} target
+ */
+export function applyUprightLook(camera, from, target) {
+  const dx = target.x - from.x;
+  const dy = target.y - from.y;
+  const dz = target.z - from.z;
+  const yaw = Math.atan2(-dx, -dz);
+  const pitch = Math.atan2(dy, Math.hypot(dx, dz));
+  camera.up.set(0, 1, 0);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.set(pitch, yaw, 0);
+  camera.quaternion.setFromEuler(camera.rotation);
 }

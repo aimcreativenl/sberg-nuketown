@@ -123,6 +123,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const gameSrc = fs.readFileSync(path.join(__dirname, '../src/game/Game.js'), 'utf8');
 assert(gameSrc.includes('EffectComposer'), 'Game wires EffectComposer');
 assert(gameSrc.includes('UnrealBloomPass'), 'Game wires UnrealBloomPass');
+assert(gameSrc.includes('VIEWMODEL_LAYER'), 'viewmodel uses overlay layer');
+assert(gameSrc.includes('clearDepth'), 'viewmodel overlay clears depth');
 assert(gameSrc.includes('PastelGradeShader') || gameSrc.includes('PastelGradePass'), 'pastel grade pass');
 assert(gameSrc.includes('GFX.shadowMapSize') || gameSrc.includes('shadowMapSize'), 'shadow size from GFX');
 assert(gameSrc.includes('maxPixelRatio') || gameSrc.includes('GFX.maxPixelRatio'), 'high DPI path');
