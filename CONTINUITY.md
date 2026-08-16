@@ -5,10 +5,10 @@
 | | |
 |--|--|
 | **Laatst bijgewerkt** | 2026-08-16 |
-| **Current checkpoint** | `main` — Candy Foundry (Syrup Canal Foundry) shipping live |
+| **Current checkpoint** | `main` `12bfb3d` live — Candy Foundry (Syrup Canal Foundry) |
 | **Local game** | http://127.0.0.1:5175/ |
 | **Progress dashboard** | http://127.0.0.1:8766/ |
-| **HEAD (typisch)** | `eae3178` (`feat: fix phone landscape menu and tap-to-shoot`) |
+| **HEAD (typisch)** | `12bfb3d` (`feat: ship Candy Foundry map with flowing syrup, kiosk, and conveyor`) |
 | **Branch** | `main` |
 | **Repo** | https://github.com/aimcreativenl/sberg-nuketown |
 | **Game (live)** | https://sberg-nuketown.vercel.app/ |
