@@ -772,7 +772,7 @@ export class WeaponController {
     // Full-auto (M16): fire every tick while LMB held, until mag empty
     let triggerPulled = false;
     if (def.auto) {
-      triggerPulled = wantShoot;
+      triggerPulled = wantShoot || shootClick;
     } else {
       // Prefer explicit click buffer; also allow classic edge if buffer empty
       triggerPulled = shootClick || (wantShoot && !this.wasShoot);
@@ -787,8 +787,8 @@ export class WeaponController {
     if (canFire) {
       this.currentAmmo = Math.max(0, Math.floor(this.currentAmmo) - 1);
       this.cooldown = 1 / Math.max(0.1, def.fireRate);
-      // Only consume buffered click when the round actually left the barrel
-      if (!def.auto) input.onSemiFire?.();
+      // Consume a tap/click when that tap actually fired (pistol + look-pad M16 taps)
+      if (shootClick) input.onSemiFire?.();
 
       // Phase A viewmodel juice — stronger punch / kick / recoil per shot
       const kick =

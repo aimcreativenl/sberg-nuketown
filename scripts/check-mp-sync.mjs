@@ -83,6 +83,18 @@ assert(INPUT_HZ === 30, `INPUT_HZ === 30 (got ${INPUT_HZ})`);
   assert(frame.weaponSlot === 1, 'sampleInputFrame weaponSlot');
 }
 
+{
+  const player = {
+    keys: new Set(),
+    buttons: { left: false, right: false },
+    yaw: 0,
+    pitch: 0,
+    shootClicks: 1,
+  };
+  const frame = sampleInputFrame(player, { seq: 1, tick: 1, dt: 0.016, peek: true });
+  assert(frame.fire === true, 'look-pad tap shootClicks counts as MP fire');
+}
+
 // ─── NetPawn setInput ignores old seq ──────────────────────────────────
 {
   const pawn = new NetPawn({

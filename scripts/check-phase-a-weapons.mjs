@@ -152,6 +152,26 @@ assert(juiceM.kickPitch > juiceBeforeM16.kickPitch, `M16 kickPitch increased`);
 assert(juiceM.punchLength > 0, `M16 punchLength > 0 got ${juiceM.punchLength}`);
 
 {
+  wc.cooldown = 0;
+  const ammoTap = wc.currentAmmo;
+  let consumed = 0;
+  const tapShots = wc.update(
+    1 / 60,
+    makeInput({
+      shoot: false,
+      shootClick: true,
+      onSemiFire: () => {
+        consumed += 1;
+      },
+    }),
+    true
+  );
+  assert(tapShots.length === 1, 'M16 tap (shootClick) fires one round');
+  assert(consumed === 1, 'M16 tap consumes the click buffer');
+  assert(wc.currentAmmo === ammoTap - 1, 'M16 tap spends one ammo');
+}
+
+{
   const hipGun = new WeaponController(camera, null, null, null);
   hipGun.setLoadoutSlot(1);
   hipGun.update(1 / 60, makeInput({ shoot: true }), true);

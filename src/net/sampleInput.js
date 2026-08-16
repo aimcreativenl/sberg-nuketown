@@ -50,7 +50,7 @@ export function sampleInputFrame(player, meta) {
   const jump = keys.has('Space');
 
   const buttons = player?.buttons || { left: false, right: false };
-  const fire = !!buttons.left;
+  const fire = !!buttons.left || (player?.shootClicks | 0) > 0;
   const aimHold = meta.aimHold != null ? !!meta.aimHold : !!buttons.right;
   const peek = !!meta.peek;
 

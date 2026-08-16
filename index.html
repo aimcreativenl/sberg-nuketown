@@ -98,7 +98,7 @@
             </div>
             <div class="how-touch">
               <p>Left stick move (push forward to sprint)</p>
-              <p>Right side: drag to look · hold <b>FIRE</b> and drag to look and shoot</p>
+              <p>Right side: drag to look · tap to shoot</p>
               <p><b>AIM</b> hold to aim, tap for scope · tap the weapon name to swap</p>
               <p><b>JUMP</b> · <b>R</b> reload · <b>USE</b> doors / medkits</p>
             </div>
@@ -183,7 +183,7 @@
 
         <div id="kill-feed"></div>
 
-        <div id="weapon-banner">
+        <div id="weapon-banner" role="button" tabindex="0" aria-label="Switch weapon">
           <span class="weapon-tier-chip" id="weapon-tier">1 / 5</span>
           <span id="weapon-name">PISTOL</span>
           <span id="scope-zoom-label" class="scope-zoom-label hidden">4x</span>
@@ -254,7 +254,6 @@
             <button type="button" class="touch-btn touch-reload" data-touch="reload">R</button>
             <button type="button" class="touch-btn touch-jump" data-touch="jump">JUMP</button>
             <button type="button" class="touch-btn touch-aim" data-touch="aim">AIM</button>
-            <button type="button" class="touch-btn touch-fire" data-touch="fire">FIRE</button>
           </div>
         </div>
       </div>
@@ -309,7 +308,7 @@
             </label>
             <label class="settings-field">
               <span class="settings-label">Gyroscope</span>
-              <span class="settings-hint">Tilt to look while thumbs stay on move + FIRE (PUBG / COD)</span>
+              <span class="settings-hint">Tilt to look while thumbs stay on move + look (PUBG / COD)</span>
               <select id="gyro-mode">
                 <option value="off">Off</option>
                 <option value="ads">While aiming</option>

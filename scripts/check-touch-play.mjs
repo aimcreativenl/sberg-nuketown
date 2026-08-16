@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isTouchPlay, isTouchPortrait } from '../src/input/detectPlayMode.js';
-import { joystickToKeys, lookIdAfterFireDown } from '../src/input/TouchControls.js';
+import { joystickToKeys, lookIdAfterFireDown, isLookTap } from '../src/input/TouchControls.js';
 import { gyroLookActive, motionToLookRates, screenOrientationAngle } from '../src/input/GyroLook.js';
 
 const failures = [];
@@ -102,13 +102,28 @@ assert(screenOrientationAngle({}, { orientation: -90 }) === 270, 'window.orienta
 
 assert(lookIdAfterFireDown(null, 7) === 7, 'FIRE starts look when the look pad is free');
 assert(lookIdAfterFireDown(3, 7) === 3, 'FIRE does not steal an existing look finger');
+assert(isLookTap(4, 90) === true, 'short still look press is a tap');
+assert(isLookTap(40, 90) === false, 'drag is not a tap');
+assert(isLookTap(4, 400) === false, 'hold is not a tap');
 
 const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../index.html'), 'utf8');
 const fireBtns = html.match(/data-touch="fire"/g) || [];
-assert(fireBtns.length === 1, `exactly one FIRE button (got ${fireBtns.length})`);
+assert(fireBtns.length === 0, `FIRE button removed (got ${fireBtns.length})`);
+assert(html.includes('data-zone="look"'), 'look pad remains for look + tap-to-shoot');
 assert(!html.includes('data-touch="gun1"') && !html.includes('data-touch="gun2"'), 'weapon 1/2 buttons are off the stick');
 assert(!html.includes('touch-fire-left'), 'no left claw FIRE');
 assert(html.includes('id="weapon-banner"'), 'weapon banner remains for tap-to-swap');
+assert(html.includes('tap to shoot'), 'how-to mentions look-pad tap fire');
+
+const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../src/style.css'), 'utf8');
+assert(css.includes('(orientation: landscape)'), 'phone landscape start layout');
+assert(css.includes("'brand play'"), 'landscape start is title + actions side by side');
+assert(/html\.touch-play\s+#weapon-banner[\s\S]{0,500}z-index:\s*45/.test(css), 'weapon banner stacks above look pad');
+assert(/\.touch-look[\s\S]{0,280}88px/.test(css), 'look pad sits below the weapon banner');
+
+const touchSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../src/input/TouchControls.js'), 'utf8');
+assert((touchSrc.match(/export function lookIdAfterFireDown/g) || []).length === 1, 'lookIdAfterFireDown exported once');
+assert(touchSrc.includes('shootClicks'), 'look-pad tap queues a shot');
 
 const report = { ok: failures.length === 0, failures };
 console.log(JSON.stringify(report, null, 2));

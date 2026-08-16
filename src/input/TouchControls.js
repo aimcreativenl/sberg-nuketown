@@ -1,5 +1,5 @@
 /**
- * On-screen FPS controls: left move stick, right look pad, fire/aim/jump.
+ * On-screen FPS controls: left move stick, right look pad (drag look / tap shoot).
  * Writes into the same Player keys/buttons the desktop path uses.
  */
 import { TOUCH_LOOK_PIXEL } from '../game/constants.js';
@@ -8,14 +8,21 @@ const DEAD = 0.18;
 const DIR = 0.28;
 const SPRINT_MAG = 0.78;
 const AIM_TAP_MS = 220;
+const LOOK_TAP_MS = 220;
+const LOOK_TAP_PX = 16;
 
 /**
- * FIRE also drives look when no other look finger is down (2-thumb).
+ * Legacy FIRE also drove look when no other look finger was down (2-thumb).
  * @param {number|null} lookId
  * @param {number} firePointerId
  */
 export function lookIdAfterFireDown(lookId, firePointerId) {
   return lookId == null ? firePointerId : lookId;
+}
+
+/** True when a look-pad press was a tap (shoot) rather than a drag (look). */
+export function isLookTap(movedPx, durationMs) {
+  return durationMs < LOOK_TAP_MS && movedPx < LOOK_TAP_PX;
 }
 
 /**
@@ -68,6 +75,8 @@ export class TouchControls {
     this._moveOrigin = { x: 0, y: 0 };
     this._lookLast = { x: 0, y: 0 };
     this._aimDownAt = 0;
+    this._lookDownAt = 0;
+    this._lookMoved = 0;
     this._bound = false;
     this._onPointerDown = (e) => this._pointerDown(e);
     this._onPointerMove = (e) => this._pointerMove(e);
@@ -111,6 +120,8 @@ export class TouchControls {
     this._fireIds.clear();
     this._aimId = null;
     this._jumpId = null;
+    this._lookDownAt = 0;
+    this._lookMoved = 0;
     this._clearTouchKeys();
     if (this.player) {
       this.player.buttons.left = false;
@@ -226,6 +237,8 @@ export class TouchControls {
     this._lookId = id;
     this._lookLast.x = x;
     this._lookLast.y = y;
+    this._lookMoved = 0;
+    this._lookDownAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   }
 
   _placeStickBase(x, y) {
@@ -258,6 +271,7 @@ export class TouchControls {
       const dy = e.clientY - this._lookLast.y;
       this._lookLast.x = e.clientX;
       this._lookLast.y = e.clientY;
+      this._lookMoved += Math.hypot(dx, dy);
       this.player.mouse.dx += dx * TOUCH_LOOK_PIXEL;
       this.player.mouse.dy += dy * TOUCH_LOOK_PIXEL;
     }
@@ -271,7 +285,12 @@ export class TouchControls {
       this._resetStickBase();
     }
     if (e.pointerId === this._lookId) {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (isLookTap(this._lookMoved, now - (this._lookDownAt || 0))) {
+        this.player.shootClicks = Math.min(3, (this.player.shootClicks || 0) + 1);
+      }
       this._lookId = null;
+      this._lookMoved = 0;
     }
     if (this._fireIds.has(e.pointerId)) {
       this._fireIds.delete(e.pointerId);

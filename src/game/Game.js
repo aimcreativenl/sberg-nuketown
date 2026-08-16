@@ -223,6 +223,7 @@ export class Game {
     this._onResize = () => this._resize();
     window.addEventListener('resize', this._onResize);
     window.addEventListener('orientationchange', this._onResize);
+    window.visualViewport?.addEventListener('resize', this._onResize);
     this._resize();
 
     this._loop = this._loop.bind(this);
@@ -268,7 +269,9 @@ export class Game {
     });
     // High-DPI path for 4K-class displays (capped for GPU sanity)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GFX.maxPixelRatio));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+    this.renderer.domElement.style.width = '100%';
+    this.renderer.domElement.style.height = '100%';
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -2113,12 +2116,22 @@ export class Game {
   }
 
   _resize() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const canvas = this.canvas || this.renderer?.domElement;
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const w = Math.max(
+      1,
+      Math.round(canvas?.clientWidth || vv?.width || window.innerWidth || 1)
+    );
+    const h = Math.max(
+      1,
+      Math.round(canvas?.clientHeight || vv?.height || window.innerHeight || 1)
+    );
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GFX.maxPixelRatio));
-    this.renderer.setSize(w, h);
+    this.renderer.setSize(w, h, false);
+    this.renderer.domElement.style.width = '100%';
+    this.renderer.domElement.style.height = '100%';
     if (this.composer) {
       this.composer.setPixelRatio(this.renderer.getPixelRatio());
       this.composer.setSize(w, h);
