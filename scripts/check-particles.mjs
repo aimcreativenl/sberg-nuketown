@@ -49,6 +49,11 @@ assert(
   `snow uses NormalBlending (got ${ps.snow.material.blending})`
 );
 assert(ps.snow.material.opacity <= 0.7, `snow opacity capped (got ${ps.snow.material.opacity})`);
+ps.setSnowEnabled(false);
+assert(!ps.snow, 'setSnowEnabled(false) removes snow');
+assert(!scene.getObjectByName('snow_vfx'), 'snow mesh removed from scene');
+ps.setSnowEnabled(true);
+assert(!!ps.snow, 'setSnowEnabled(true) restores snow');
 
 const report = {
   ok: failures.length === 0,

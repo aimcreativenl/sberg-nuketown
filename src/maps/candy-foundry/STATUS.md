@@ -6,6 +6,14 @@ Candy Foundry **ships on `main`** (start-toggle; default remains nuketown). Do *
 
 ## Session log (append-only — latest first)
 
+### 2026-08-16 no indoor snow
+
+**What:** `mapData.snow: false` on Foundry. `Game._syncMapSnow` / `ParticleSystem.clearSnow` on map swap. Nuketown still snows.
+
+**Files:** `index.js`, `Game.js`, `Particles.js`, `IMap.js`.
+
+**Why:** indoor hangar; user screenshot showed flakes.
+
 ### 2026-08-16 tasting kiosk + live conveyor
 
 **What:** Enterable SE kiosk (`door_front_tasting_kiosk` at ~50,−43.5, face −Z, E). Conveyor at z=−39.6, x 28→58: belt UV scrolls, 6 gift boxes loop +X at 3.2 m/s. Sprint on the belt rides with it (`beltCarryDelta` in Player + NetPawn). Yard skips props inside the kiosk AABB.

@@ -154,7 +154,7 @@ export class Game {
     this.doors = null;
     this.loadMap(DEFAULT_MAP_ID, { persist: false });
     this.particles = new ParticleSystem(this.scene);
-    this.particles.snowDust();
+    this._syncMapSnow();
 
     this.player = new Player(this.camera, this.mapData);
     this.touchPlay = isTouchPlay();
@@ -300,9 +300,16 @@ export class Game {
     }
     this._applyMapFog(this.mapData);
     this._applyMapPresentation(this.mapData);
+    this._syncMapSnow();
     if (persist) writeStoredMapId(this.mapId);
     this._syncMapToggle();
     return this.mapData;
+  }
+
+  /** Falling snow is outdoor-only. Indoor maps set `mapData.snow === false`. */
+  _syncMapSnow() {
+    if (!this.particles) return;
+    this.particles.setSnowEnabled(this.mapData?.snow !== false);
   }
 
   /**
@@ -1524,7 +1531,7 @@ export class Game {
       if (this._mpWakeGrace > 0) this._mpWakeGrace = Math.max(0, this._mpWakeGrace - dt);
       this._update(dt);
     } else {
-      // Cinematic orbit on start; gentle snow on all idle menus
+      // Cinematic orbit on start; snow only if the live map enables it
       if (!this.running && !this.matchOver) {
         this.menuCam.update(dt);
         if (this.weapons?.viewModel) this.weapons.viewModel.visible = false;

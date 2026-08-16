@@ -45,6 +45,7 @@
  * @property {number} [bounds] - Player XZ clamp (Nuketown = 38).
  * @property {number} [wall] - Perimeter wall half-extent (Nuketown MAP_WALL = 40).
  * @property {MapFog} [fog] - Scene fog override; omit to keep GFX fog.
+ * @property {boolean} [snow] - Falling snow VFX. Default true (Nuketown). Indoor maps set false.
  * @property {SlowZone[]} [slowZones] - Optional syrup / water speed volumes.
  * @property {Array<{minX:number,maxX:number,minZ:number,maxZ:number,yMin?:number,yMax?:number,dirX?:number,dirZ?:number,speed:number}>} [belts] - Sprint-to-ride conveyors.
  * @property {Array<{x:number,y:number,z:number}|import('three').Vector3>} [medkitSpots]

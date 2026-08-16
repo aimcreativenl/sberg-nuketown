@@ -312,6 +312,20 @@ export class ParticleSystem {
     }
   }
 
+  /** Outdoor Nuketown only — indoor maps call `setSnowEnabled(false)`. */
+  setSnowEnabled(on) {
+    if (on) this.snowDust();
+    else this.clearSnow();
+  }
+
+  clearSnow() {
+    if (!this.snow) return;
+    this.scene.remove(this.snow);
+    this.snow.geometry?.dispose?.();
+    this.snow.material?.dispose?.();
+    this.snow = null;
+  }
+
   snowDust() {
     if (this.snow) return;
     // Fewer flakes: dense fields + any residual glow still cost outdoor readability

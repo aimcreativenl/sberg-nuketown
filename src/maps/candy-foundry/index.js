@@ -60,6 +60,7 @@ export function buildCandyFoundry(scene) {
     wall: CANDY_MAP_WALL,
     fog: CANDY_FOG,
     brZone: BR_ZONE,
+    snow: false,
     tick(dt) {
       tickSyrupFlows(flows, dt);
       for (let i = 0; i < conveyors.length; i++) conveyors[i].tick?.(dt);

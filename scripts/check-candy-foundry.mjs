@@ -116,6 +116,7 @@ assert(Array.isArray(data.coverPoints) && data.coverPoints.length > 20, `cover >
 assert(Array.isArray(data.waypoints) && data.waypoints.length > 40, `waypoints > 40 (got ${data.waypoints?.length})`);
 assert(Array.isArray(data.slowZones) && data.slowZones.length >= 1, `slowZones authored (got ${data.slowZones?.length})`);
 assert(data.fog?.far > 150, `fog.far covers hangar (got ${data.fog?.far})`);
+assert(data.snow === false, 'indoor Foundry disables falling snow');
 
 const names = [];
 data.group.traverse((o) => {
