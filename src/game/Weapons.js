@@ -366,6 +366,8 @@ export class WeaponController {
     this.viewScale = 1.32;
     this.baseFov = 75;
     this.wasShoot = false;
+    /** After match start / slot swap, ignore leftover hold until release. */
+    this._ignoreHeldTrigger = false;
     this.muzzleLocal = new THREE.Vector3(0.0, 0.03, -0.21);
     this.kickPitch = 0;
     this.kickYaw = 0;
@@ -528,7 +530,8 @@ export class WeaponController {
     this.reloadTimer = 0;
     this.cooldown = 0;
     this.recoil = 0;
-    this.wasShoot = false;
+    this.wasShoot = true;
+    this._ignoreHeldTrigger = true;
     this.scoped = false;
     this.scopeBlend = 0;
     this.scopeZoom = 4;
@@ -777,7 +780,15 @@ export class WeaponController {
       // Prefer explicit click buffer; also allow classic edge if buffer empty
       triggerPulled = shootClick || (wantShoot && !this.wasShoot);
     }
-    if (switchedSlot) triggerPulled = false;
+    if (switchedSlot) {
+      triggerPulled = false;
+      this._ignoreHeldTrigger = true;
+      if (shootClick) input.onSemiFire?.();
+    }
+    if (this._ignoreHeldTrigger) {
+      if (!wantShoot && !shootClick) this._ignoreHeldTrigger = false;
+      else triggerPulled = false;
+    }
     const canFire =
       !this.reloading &&
       this.cooldown <= 0 &&

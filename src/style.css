@@ -427,6 +427,14 @@ body,
   width: 100%;
 }
 
+.start-diff-pick {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.35rem;
+  width: 100%;
+  margin-top: 0.4rem;
+}
+
 .btn-map {
   appearance: none;
   cursor: pointer;
@@ -457,6 +465,38 @@ body,
   color: #1a1020;
   background: linear-gradient(180deg, #fff3c4 0%, #f0c45a 100%);
   box-shadow: 0 5px 0 #c4922a, 0 8px 0 #1a1020;
+}
+
+.btn-diff {
+  appearance: none;
+  cursor: pointer;
+  font-family: 'Bungee', 'Syne', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: clamp(0.48rem, 1.3vw, 0.68rem);
+  color: #fff8e7;
+  background: linear-gradient(180deg, #4a6a88 0%, #243858 100%);
+  border: 3px solid #1a1020;
+  border-radius: 6px;
+  padding: 0.55rem 0.2rem 0.48rem;
+  box-shadow: 0 4px 0 #1a1020;
+  min-height: 2.5rem;
+}
+
+.btn-diff:hover {
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+}
+
+.btn-diff:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #1a1020;
+}
+
+.btn-diff.is-on {
+  color: #1a1020;
+  background: linear-gradient(180deg, #c8f4e0 0%, #7ee8b8 100%);
+  box-shadow: 0 4px 0 #3aaa78, 0 7px 0 #1a1020;
 }
 
 .btn-play,
@@ -971,6 +1011,21 @@ body,
 
   .btn-map.is-on {
     box-shadow: 0 3px 0 #c4922a, 0 5px 0 #1a1020;
+  }
+
+  .start-diff-pick {
+    gap: 0.22rem;
+  }
+
+  .btn-diff {
+    min-height: 1.9rem;
+    padding: 0.24rem 0.1rem 0.2rem;
+    font-size: 0.42rem;
+    box-shadow: 0 3px 0 #1a1020;
+  }
+
+  .btn-diff.is-on {
+    box-shadow: 0 3px 0 #3aaa78, 0 5px 0 #1a1020;
   }
 
   .start-skull {

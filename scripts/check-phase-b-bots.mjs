@@ -11,6 +11,11 @@ import {
   BotManager,
 } from '../src/game/BotAI.js';
 import { BOT_NAMES } from '../src/game/VoxelCharacter.js';
+import {
+  BOT_DIFFICULTY_IDS,
+  resolveBotDifficulty,
+  setBotDifficulty,
+} from '../src/game/BotDifficulty.js';
 import { KILL_LIMIT } from '../src/game/constants.js';
 import * as THREE from 'three';
 
@@ -101,6 +106,58 @@ assert(roles.has('flanker'), 'has flanker');
 assert(roles.has('lurker'), 'has lurker');
 assert(roles.has('scavenger'), 'has scavenger');
 assert(mgr.bots.every((b) => BOT_NAMES.includes(b.name) || b.name), 'named bots');
+
+const oldPastel = ['LILAC', 'BUTTER', 'SHERBET', 'TAFFY', 'BUBBLEGUM', 'SKY', 'PEACH', 'FROST', 'MARS'];
+assert(BOT_NAMES.length >= 9, `BOT_NAMES has 9+ got ${BOT_NAMES.length}`);
+assert(new Set(BOT_NAMES).size === BOT_NAMES.length, 'bot names unique');
+assert(
+  !oldPastel.every((n) => BOT_NAMES.includes(n)),
+  'bot names are not the old pastel roster'
+);
+assert(!BOT_NAMES.includes('LILAC'), 'old LILAC name is gone');
+
+setBotDifficulty('medium');
+const snaps = BOT_DIFFICULTY_IDS.map((id) => resolveBotDifficulty(id));
+assert(snaps.length === 4, 'four difficulty ids');
+for (const snap of snaps) {
+  assert(BOT_DIFFICULTY_IDS.includes(snap.id), `snap id ${snap.id}`);
+  assert(typeof snap.aimWindup === 'number', `${snap.id}.aimWindup`);
+  assert(typeof snap.accuracy === 'number', `${snap.id}.accuracy`);
+  assert(typeof snap.reactionMul === 'number', `${snap.id}.reactionMul`);
+  assert(typeof snap.hunterBonus === 'number', `${snap.id}.hunterBonus`);
+}
+for (let i = 0; i < snaps.length; i++) {
+  for (let j = i + 1; j < snaps.length; j++) {
+    const a = snaps[i];
+    const b = snaps[j];
+    const distinct =
+      a.aimWindup !== b.aimWindup ||
+      a.accuracy !== b.accuracy ||
+      a.reactionMul !== b.reactionMul ||
+      a.hunterBonus !== b.hunterBonus;
+    assert(distinct, `${a.id} vs ${b.id} must differ`);
+  }
+}
+
+setBotDifficulty('easy');
+const easyHunters = computeMaxHunters(0, 100, KILL_LIMIT);
+const easyErr = aimErrorForDistance(18, 1);
+const easyReact = reactionDelayForRole('hunter', 20);
+const easySnap = resolveBotDifficulty('easy');
+setBotDifficulty('difficult');
+const hardHunters = computeMaxHunters(0, 100, KILL_LIMIT);
+const hardErr = aimErrorForDistance(18, 1);
+const hardReact = reactionDelayForRole('hunter', 20);
+setBotDifficulty('extreme');
+const xHunters = computeMaxHunters(0, 100, KILL_LIMIT);
+const xErr = aimErrorForDistance(18, 1);
+const xReact = reactionDelayForRole('hunter', 20);
+assert(easyHunters < hardHunters, `easy hunters ${easyHunters} < difficult ${hardHunters}`);
+assert(hardHunters < xHunters, `difficult hunters ${hardHunters} < extreme ${xHunters}`);
+assert(xErr < easyErr, `extreme aim tighter ${xErr} < easy ${easyErr}`);
+assert(xReact < easyReact, `extreme reacts faster ${xReact} < easy ${easyReact}`);
+assert(easySnap.aimWindup > resolveBotDifficulty('extreme').aimWindup, 'easy windup slower than extreme');
+setBotDifficulty('medium');
 
 // Tick AI a few frames — should not throw; hunters selected
 for (let i = 0; i < 30; i++) mgr.update(0.05);

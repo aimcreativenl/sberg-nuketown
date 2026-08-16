@@ -1,6 +1,6 @@
 /**
  * Moving candy conveyor: scrolling belt + looping gift boxes.
- * Player sprint-to-ride is handled in Player/NetPawn via mapData.belts.
+ * Player ride is occupancy of mapData.belts (no sprint required).
  */
 import * as THREE from 'three';
 import { CONVEYOR } from './layout.js';

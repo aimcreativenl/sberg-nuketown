@@ -300,14 +300,12 @@ export class NetPawn {
     next.x = THREE.MathUtils.clamp(next.x, -b, b);
     next.z = THREE.MathUtils.clamp(next.z, -b, b);
 
-    if (sprint && this.grounded) {
-      const ride = beltCarryDelta(next.x, next.y - this.height, next.z, true, world.belts);
-      if (ride) {
-        next.x += ride.dx * dt;
-        next.z += ride.dz * dt;
-        next.x = THREE.MathUtils.clamp(next.x, -b, b);
-        next.z = THREE.MathUtils.clamp(next.z, -b, b);
-      }
+    const ride = beltCarryDelta(next.x, next.y - this.height, next.z, world.belts);
+    if (ride) {
+      next.x += ride.dx * dt;
+      next.z += ride.dz * dt;
+      next.x = THREE.MathUtils.clamp(next.x, -b, b);
+      next.z = THREE.MathUtils.clamp(next.z, -b, b);
     }
 
     const feetMul = this._slowZoneMul(next.x, next.y - this.height, next.z, world);

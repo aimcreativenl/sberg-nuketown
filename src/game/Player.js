@@ -211,10 +211,19 @@ export class Player {
     this._airJumpUsed = false;
     this._spaceHeld = false;
     this._mantleCooldown = 0;
+    this.clearFireLatches();
     // Phase 1c: keep the Rapier capsule in sync with respawns/full match resets.
     if (this._rapier && this.physics) {
       this.physics.teleport(this._rapier, this.position.x, this.position.y, this.position.z);
     }
+  }
+
+  /** Drop leftover LMB / click-buffer so PLAY and slot swaps cannot auto-fire. */
+  clearFireLatches() {
+    this.shootClicks = 0;
+    this.buttons.left = false;
+    this.buttons.right = false;
+    this.reloadPressed = false;
   }
 
   fullMatchReset(spawn) {
@@ -223,6 +232,7 @@ export class Player {
     this.funPoints = 0;
     this.weaponIndex = 0;
     this.reset(spawn);
+    this.clearFireLatches();
   }
 
   updateLook(aiming = false, dt = 0) {
@@ -590,20 +600,12 @@ export class Player {
     next.x = THREE.MathUtils.clamp(next.x, -bound, bound);
     next.z = THREE.MathUtils.clamp(next.z, -bound, bound);
 
-    if (sprint && this.grounded) {
-      const ride = beltCarryDelta(
-        next.x,
-        next.y - this.height,
-        next.z,
-        true,
-        this.mapData?.belts
-      );
-      if (ride) {
-        next.x += ride.dx * dt;
-        next.z += ride.dz * dt;
-        next.x = THREE.MathUtils.clamp(next.x, -bound, bound);
-        next.z = THREE.MathUtils.clamp(next.z, -bound, bound);
-      }
+    const ride = beltCarryDelta(next.x, next.y - this.height, next.z, this.mapData?.belts);
+    if (ride) {
+      next.x += ride.dx * dt;
+      next.z += ride.dz * dt;
+      next.x = THREE.MathUtils.clamp(next.x, -bound, bound);
+      next.z = THREE.MathUtils.clamp(next.z, -bound, bound);
     }
 
     const feetMul = this._slowZoneMul(next.x, next.y - this.height, next.z);

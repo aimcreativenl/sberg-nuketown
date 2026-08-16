@@ -47,7 +47,7 @@
  * @property {MapFog} [fog] - Scene fog override; omit to keep GFX fog.
  * @property {boolean} [snow] - Falling snow VFX. Default true (Nuketown). Indoor maps set false.
  * @property {SlowZone[]} [slowZones] - Optional syrup / water speed volumes.
- * @property {Array<{minX:number,maxX:number,minZ:number,maxZ:number,yMin?:number,yMax?:number,dirX?:number,dirZ?:number,speed:number}>} [belts] - Sprint-to-ride conveyors.
+ * @property {Array<{minX:number,maxX:number,minZ:number,maxZ:number,yMin?:number,yMax?:number,dirX?:number,dirZ?:number,speed:number}>} [belts] - Occupancy-ride conveyors.
  * @property {Array<{x:number,y:number,z:number}|import('three').Vector3>} [medkitSpots]
  * @property {BrZone} [brZone] - BR radii; omit to use pubg.js BR_ZONE.
  * @property {{ alpha: {x:number,y:number,z:number}, bravo: {x:number,y:number,z:number} }} [flagHomes]

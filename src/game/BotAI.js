@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { VoxelCharacter, BOT_NAMES, PASTEL_OUTFITS } from './VoxelCharacter.js';
+import { getBotDifficulty } from './BotDifficulty.js';
 import { WEAPONS } from './Weapons.js';
 import {
   PLAYER_HEIGHT,
@@ -45,6 +46,10 @@ const DONUT_RANGE = 12;
 const COMBAT_STOP_DIST = 6.5;
 const PLAYER_MIN_DIST = 3.2;
 const AIM_WINDUP = 0.35;
+
+function aimWindup() {
+  return getBotDifficulty().aimWindup ?? AIM_WINDUP;
+}
 /** How long a bot stays “aggro’d” after player damages them */
 const UNDER_FIRE_TIME = 5.5;
 
@@ -94,7 +99,7 @@ function lerpAngle(a, b, t) {
   return a + d * t;
 }
 
-/** Dynamic hunter count from player pressure (kills + low HP). */
+/** Dynamic hunter count from player pressure (kills + low HP) + difficulty bonus. */
 export function computeMaxHunters(playerKills = 0, playerHp = 100, killLimit = KILL_LIMIT) {
   let n = 2;
   if (playerKills >= 3) n = 3;
@@ -102,7 +107,8 @@ export function computeMaxHunters(playerKills = 0, playerHp = 100, killLimit = K
   if (playerKills >= 14) n = 5;
   if (playerHp < 40) n += 1;
   if (playerHp < 20) n += 1;
-  return Math.min(6, Math.max(2, n));
+  n += getBotDifficulty().hunterBonus || 0;
+  return Math.min(6, Math.max(1, n));
 }
 
 /**
@@ -110,8 +116,10 @@ export function computeMaxHunters(playerKills = 0, playerHp = 100, killLimit = K
  * Reaction delay seconds before a bot that just gained LOS may fire.
  */
 export function aimErrorForDistance(dist, accuracyMult = 1) {
+  const diff = getBotDifficulty();
   const base = 0.12 + Math.max(0, dist - 6) * 0.035;
-  return Math.max(0.08, base / Math.max(0.5, accuracyMult));
+  const acc = Math.max(0.5, accuracyMult * (diff.accuracy || 1));
+  return Math.max(0.08, (base / acc) * (diff.spreadMul || 1));
 }
 
 export function reactionDelayForRole(roleId, distPlayer = 20) {
@@ -122,7 +130,7 @@ export function reactionDelayForRole(roleId, distPlayer = 20) {
   // Point-blank: almost immediate fire
   if (distPlayer < 8) base *= 0.45;
   else if (distPlayer < 12) base *= 0.7;
-  return base;
+  return base * (getBotDifficulty().reactionMul || 1);
 }
 
 /** True if bot should fight player right now (LOS + range / hunter / under fire). */
@@ -336,7 +344,7 @@ export class BotManager {
     if (attackerInfo?.isPlayer) {
       bot.underFire = UNDER_FIRE_TIME;
       bot.losTimer = Math.max(bot.losTimer || 0, reactionDelayForRole(bot.role, 6));
-      bot.aimTimer = Math.max(bot.aimTimer || 0, AIM_WINDUP * 0.5);
+      bot.aimTimer = Math.max(bot.aimTimer || 0, aimWindup() * 0.5);
       // Break long hide; go for cover then return fire
       bot.peekState = 'peak';
       bot.peekTimer = 0.35;
@@ -656,15 +664,16 @@ export class BotManager {
           if (dir.lengthSq() > 0) dir.normalize();
 
           sprinting = hasMoveIntent && (bot.state === 'chase' || bot.state === 'flank');
+          const speedMul = getBotDifficulty().speedMul || 1;
           const speed = !hasMoveIntent
             ? 0
             : sprinting
-              ? BOT_SPRINT * (role.aggression > 1 ? 1.05 : 1)
+              ? BOT_SPRINT * (role.aggression > 1 ? 1.05 : 1) * speedMul
               : combatStrafe
-              ? BOT_STRAFE
+              ? BOT_STRAFE * speedMul
               : bot.state === 'attack'
-                ? BOT_SPEED * 0.7
-                : BOT_SPEED * (bot.role === 'scavenger' && bot.state === 'seek_donut' ? 1.1 : 1);
+                ? BOT_SPEED * 0.7 * speedMul
+                : BOT_SPEED * (bot.role === 'scavenger' && bot.state === 'seek_donut' ? 1.1 : 1) * speedMul;
           this._steerBotVelocity(bot, hasMoveIntent ? dir : null, speed, dt);
           const move = this._tmp.set(bot.velocity.x * dt, 0, bot.velocity.z * dt);
 
@@ -817,7 +826,7 @@ export class BotManager {
       const wantsAim = combatReady && reactOk;
 
       if (wantsAim) {
-        bot.aimTimer = Math.min(AIM_WINDUP + 0.5, (bot.aimTimer || 0) + dt);
+        bot.aimTimer = Math.min(aimWindup() + 0.5, (bot.aimTimer || 0) + dt);
       } else if (!combatReady) {
         bot.aimTimer = Math.max(0, (bot.aimTimer || 0) - dt * 2.5);
       }
@@ -826,7 +835,7 @@ export class BotManager {
         wantsAim || (combatReady && !bot.reloading && (bot.aimTimer || 0) > 0.08);
       // Faster first shot when close
       const windup =
-        AIM_WINDUP *
+        aimWindup() *
         (distPlayer < 8 ? 0.55 : distPlayer < 12 ? 0.75 : bot.role === 'lurker' ? 0.9 : 1);
       const aimReady = (bot.aimTimer || 0) >= windup;
 
@@ -901,12 +910,14 @@ export class BotManager {
     if (bot.reloading || bot.ammo <= 0 || !playerPos) return;
     const w = WEAPONS[Math.min(bot.weaponIndex, WEAPONS.length - 1)];
     const role = bot.roleDef || BOT_ROLES.hunter;
-    bot.fireCooldown = (0.5 + Math.random() * 0.4) * (role.fireCadence || 1);
+    bot.fireCooldown =
+      ((0.5 + Math.random() * 0.4) * (role.fireCadence || 1)) /
+      Math.max(0.35, getBotDifficulty().aggression || 1);
     bot.ammo -= 1;
 
     // Visible TPP fire: snap aim + arm kick the same frame as the shot
     bot.character.triggerFire?.();
-    bot.aimTimer = Math.max(bot.aimTimer || 0, AIM_WINDUP);
+    bot.aimTimer = Math.max(bot.aimTimer || 0, aimWindup());
 
     const origin =
       bot.character.getMuzzleWorldPosition?.() || bot.character.getChestWorldPosition();

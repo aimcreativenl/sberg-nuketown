@@ -27,6 +27,8 @@ import { brZoneFromMap, zoneRadiusAt } from '../src/modes/pubg.js';
 import { DoorManager } from '../src/game/Doors.js';
 import { playerPositionBlocked } from '../src/game/collision.js';
 import { PLAYER_HEIGHT, PLAYER_RADIUS } from '../src/game/constants.js';
+import { existsSync } from 'node:fs';
+import { SYRUP_BITMAPS } from '../src/maps/candy-foundry/syrupFlow.js';
 
 const failures = [];
 function assert(cond, msg) {
@@ -91,12 +93,27 @@ data.group.traverse((o) => {
 assert(flowNames.length >= 3, `syrup flow planes >= 3 (got ${flowNames.length})`);
 assert(typeof data.tick === 'function', 'mapData.tick animates syrup');
 {
-  let sample = null;
+  const byKind = {};
   data.group.traverse((o) => {
-    if (sample || !o.isMesh || !o.material?.map?.offset) return;
-    if (String(o.name).startsWith('canal_flow_')) sample = o.material.map;
+    if (!o.isMesh || !String(o.name).startsWith('canal_flow_')) return;
+    const map = o.material?.map;
+    if (!map) return;
+    const kind = map.userData?.syrupKind || o.userData?.syrupKind;
+    if (kind) byKind[kind] = { mesh: o, map };
   });
-  assert(!!sample, 'flow plane has a scrolling map');
+  assert(byKind.strawberry, 'strawberry canal uses a flow map');
+  assert(byKind.chocolate, 'chocolate canal uses a flow map');
+  const berrySrc = String(byKind.strawberry.map.userData.syrupSrc || byKind.strawberry.mesh.userData.syrupSrc || '');
+  const chocoSrc = String(byKind.chocolate.map.userData.syrupSrc || byKind.chocolate.mesh.userData.syrupSrc || '');
+  assert(berrySrc.includes('syrup-strawberry'), `strawberry bitmap src (${berrySrc})`);
+  assert(chocoSrc.includes('syrup-chocolate'), `chocolate bitmap src (${chocoSrc})`);
+  assert(!(byKind.strawberry.map.isDataTexture), 'strawberry is not a procedural DataTexture');
+  assert(!(byKind.chocolate.map.isDataTexture), 'chocolate is not a procedural DataTexture');
+  assert(existsSync('public/maps/candy-foundry/syrup-strawberry.jpg'), 'strawberry Imagine file on disk');
+  assert(existsSync('public/maps/candy-foundry/syrup-chocolate.jpg'), 'chocolate Imagine file on disk');
+  assert(SYRUP_BITMAPS.strawberry.endsWith('syrup-strawberry.jpg'), 'SYRUP_BITMAPS strawberry');
+  assert(SYRUP_BITMAPS.chocolate.endsWith('syrup-chocolate.jpg'), 'SYRUP_BITMAPS chocolate');
+  const sample = byKind.strawberry.map;
   const ox = sample.offset.x;
   const oy = sample.offset.y;
   data.tick(0.5);
@@ -192,7 +209,7 @@ if (frontKiosk) {
 
 assert(names.includes(TASTING_KIOSK.id), 'tasting_kiosk group');
 assert(names.includes(CONVEYOR.id) || names.includes(`${CONVEYOR.id}_belt`), 'conveyor present');
-assert(Array.isArray(data.belts) && data.belts.length >= 1, 'mapData.belts for sprint-ride');
+assert(Array.isArray(data.belts) && data.belts.length >= 1, 'mapData.belts for occupancy ride');
 
 {
   let boxMesh = null;
@@ -208,20 +225,30 @@ assert(Array.isArray(data.belts) && data.belts.length >= 1, 'mapData.belts for s
 {
   const { Player } = await import('../src/game/Player.js');
   const { beltCarryDelta } = await import('../src/game/movement.js');
-  const ride = beltCarryDelta(40, CONVEYOR.y, CONVEYOR.z, true, data.belts);
-  assert(ride && ride.dx > 2, `beltCarryDelta sprint (got ${JSON.stringify(ride)})`);
-  assert(beltCarryDelta(40, CONVEYOR.y, CONVEYOR.z, false, data.belts) == null, 'no carry without sprint');
+  const ride = beltCarryDelta(40, CONVEYOR.y, CONVEYOR.z, data.belts);
+  assert(ride && ride.dx > 2, `beltCarryDelta occupancy (got ${JSON.stringify(ride)})`);
+  const noSprint = beltCarryDelta(40, CONVEYOR.y, CONVEYOR.z, false, data.belts);
+  assert(noSprint && noSprint.dx > 2, `carry without sprint (got ${JSON.stringify(noSprint)})`);
+  const offBelt = beltCarryDelta(0, CONVEYOR.y, 0, data.belts);
+  assert(offBelt == null, 'no carry off the belt AABB');
   const cam = new THREE.PerspectiveCamera();
   const player = new Player(cam, data);
   player.mapBounds = data.bounds;
   player.position.set(40, PLAYER_HEIGHT + CONVEYOR.y, CONVEYOR.z);
   player._lastFloorY = CONVEYOR.y;
-  player.grounded = true;
+  player.grounded = false;
+  player.velocity.set(0, 3.4, 0);
   player.yaw = -Math.PI / 2;
-  player.keys.add('ShiftLeft');
+  player.keys.clear();
   const xStart = player.position.x;
-  for (let i = 0; i < 45; i++) player.update(1 / 60, data.colliders, data.floors, []);
-  assert(player.position.x > xStart + 1.4, `sprint on belt rides +X (Δ=${(player.position.x - xStart).toFixed(2)})`);
+  const frames = 50;
+  for (let i = 0; i < frames; i++) player.update(1 / 60, data.colliders, data.floors, []);
+  const dx = player.position.x - xStart;
+  const expected = CONVEYOR.speed * (frames / 60);
+  assert(
+    dx > expected * 0.55,
+    `jump-then-stand on belt rides +X without sprint (Δ=${dx.toFixed(2)} expected~${expected.toFixed(2)})`
+  );
 }
 
 const gumdropFloor = (data.floors || []).some(

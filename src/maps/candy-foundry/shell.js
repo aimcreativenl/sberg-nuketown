@@ -249,6 +249,7 @@ function addCanalVisual(ctx, zone) {
     y: -0.062,
     z: cz,
     name: `canal_flow_${zone.id}`,
+    kind: zone.id,
   });
   group.add(flow.mesh);
   ctx.syrupFlows.push(flow);

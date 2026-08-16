@@ -46,7 +46,7 @@ export const TASTING_KIOSK = {
   facade: 0xffd0dc,
 };
 
-/** Factory conveyor in front of the kiosk. Boxes travel +X. Sprint-to-ride. */
+/** Factory conveyor in front of the kiosk. Boxes travel +X. Stand-to-ride. */
 export const CONVEYOR = {
   id: 'candy_line',
   x0: 28,

@@ -4,15 +4,15 @@ import { createCharMat } from './materials.js';
 import { roundedBoxGeo } from './softGeo.js';
 
 export const BOT_NAMES = [
-  'LILAC',
-  'BUTTER',
-  'SHERBET',
-  'TAFFY',
-  'BUBBLEGUM',
-  'SKY',
-  'PEACH',
-  'FROST',
-  'MARS',
+  'SHITHEAD',
+  'MR. BULLET',
+  'SNOOPYNATOR',
+  'DR. CANDYKILL',
+  'YEETMASTER',
+  'BOOM-MAMA',
+  'SIR MISSES',
+  'LIL REKT',
+  'AUNTIE AMMO',
 ];
 
 export const PASTEL_OUTFITS = [

@@ -1,66 +1,38 @@
 /**
- * Scrolling syrup-river surface. One unique canvas texture per plane so
- * offsets do not share a cache. Tick from Game via mapData.tick(dt).
+ * Scrolling syrup-river surface. Imagine bitmaps on canal planes; UV offset
+ * still ticks so the liquid reads as flowing. Node tests get a Texture stub
+ * with the same userData / offset so they do not need TextureLoader.
  */
 import * as THREE from 'three';
 
-function hexRgb(hex) {
-  const n = hex & 0xffffff;
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+/** Public Imagine 2.0 tiles — strawberry / chocolate / lemon. */
+export const SYRUP_BITMAPS = {
+  strawberry: '/maps/candy-foundry/syrup-strawberry.jpg',
+  chocolate: '/maps/candy-foundry/syrup-chocolate.jpg',
+  lemon: '/maps/candy-foundry/syrup-lemon.jpg',
+};
+
+export function flavorFromName(name, fallback = 'strawberry') {
+  const s = String(name || '').toLowerCase();
+  if (s.includes('chocolate')) return 'chocolate';
+  if (s.includes('lemon')) return 'lemon';
+  if (s.includes('straw') || s.includes('berry')) return 'strawberry';
+  return fallback;
 }
 
-function mix(a, b, t) {
-  return Math.round(a + (b - a) * t);
-}
-
-/** Tileable swirl/streak texture. DataTexture so Node tests need no canvas. */
-export function makeSyrupTexture(color, seed = 1) {
-  const size = 128;
-  const { r, g, b } = hexRgb(color);
-  const dark = { r: mix(r, 20, 0.35), g: mix(g, 10, 0.35), b: mix(b, 8, 0.35) };
-  const lite = { r: mix(r, 255, 0.42), g: mix(g, 255, 0.38), b: mix(b, 240, 0.32) };
-  const data = new Uint8Array(size * size * 4);
-
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const u = x / size;
-      const v = y / size;
-      const ribbon =
-        0.55 +
-        0.28 * Math.sin((v + seed * 0.07) * Math.PI * 8) +
-        0.18 * Math.sin((v * 2.4 + u * 0.35 + seed) * Math.PI * 4);
-      const streak = 0.5 + 0.5 * Math.sin((v * 14 + u * 0.8 + seed * 0.4) * Math.PI * 2);
-      const bubble = Math.sin((u * 19 + seed) * Math.PI * 2) * Math.sin((v * 17 - seed) * Math.PI * 2);
-      const t = Math.max(0, Math.min(1, ribbon));
-      let cr = mix(dark.r, r, t);
-      let cg = mix(dark.g, g, t);
-      let cb = mix(dark.b, b, t);
-      if (streak > 0.82) {
-        const k = (streak - 0.82) / 0.18;
-        cr = mix(cr, lite.r, k);
-        cg = mix(cg, lite.g, k);
-        cb = mix(cb, lite.b, k);
-      }
-      if (bubble > 0.72) {
-        const k = (bubble - 0.72) / 0.28;
-        cr = mix(cr, lite.r, k * 0.55);
-        cg = mix(cg, lite.g, k * 0.55);
-        cb = mix(cb, lite.b, k * 0.55);
-      }
-      const o = (y * size + x) * 4;
-      data[o] = cr;
-      data[o + 1] = cg;
-      data[o + 2] = cb;
-      data[o + 3] = 255;
-    }
-  }
-
-  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+function makeSyrupMap(kind) {
+  const flavor = SYRUP_BITMAPS[kind] ? kind : 'strawberry';
+  const src = SYRUP_BITMAPS[flavor];
+  const canLoad = typeof document !== 'undefined';
+  const tex = canLoad ? new THREE.TextureLoader().load(src) : new THREE.Texture();
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = THREE.LinearFilter;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.generateMipmaps = true;
+  tex.userData.syrupSrc = src;
+  tex.userData.syrupKind = flavor;
+  tex.userData.imagine = true;
   tex.needsUpdate = true;
   return tex;
 }
@@ -70,19 +42,20 @@ export function makeSyrupTexture(color, seed = 1) {
  * `alongX` true = strawberry / lemon (east–west). Chocolate flows north–south.
  * @returns {{ mesh: THREE.Mesh, tick: (dt: number) => void, dispose: () => void }}
  */
-export function createSyrupFlow({ color, alongX, width, depth, x, y, z, name }) {
-  const tex = makeSyrupTexture(color, Math.abs((x * 3 + z * 7) | 0) % 17);
+export function createSyrupFlow({ color, alongX, width, depth, x, y, z, name, kind }) {
+  const flavor = kind || flavorFromName(name);
+  const tex = makeSyrupMap(flavor);
   const tilesU = Math.max(1.5, width / 5.5);
   const tilesV = Math.max(1.5, depth / 5.5);
   tex.repeat.set(tilesU, tilesV);
 
   const mat = new THREE.MeshStandardMaterial({
     map: tex,
-    roughness: 0.34,
-    metalness: 0.1,
+    roughness: 0.28,
+    metalness: 0.12,
     emissive: color,
     emissiveMap: tex,
-    emissiveIntensity: 0.22,
+    emissiveIntensity: 0.18,
     name: `${name}_mat`,
   });
 
@@ -92,6 +65,8 @@ export function createSyrupFlow({ color, alongX, width, depth, x, y, z, name }) 
   mesh.castShadow = false;
   mesh.receiveShadow = false;
   mesh.name = name;
+  mesh.userData.syrupKind = flavor;
+  mesh.userData.syrupSrc = tex.userData.syrupSrc;
 
   const speed = 0.16;
   const du = alongX ? speed : speed * 0.12;

@@ -199,12 +199,14 @@ export function pickFloorY(eyeY, height, x, z, floors, opts = {}) {
 }
 
 /**
- * Moving-walkway carry (m/s). Only while sprinting and standing in the belt AABB.
+ * Moving-walkway carry (m/s). Occupancy of the belt AABB is enough — not sprint-gated.
  * Do not add this into velocity — apply as a position delta so it does not compound.
+ * Accepts legacy `(x, y, z, sprinting, belts)` — the sprint flag is ignored.
  * @returns {{ dx: number, dz: number }|null}
  */
-export function beltCarryDelta(x, feetY, z, sprinting, belts) {
-  if (!sprinting || !belts?.length) return null;
+export function beltCarryDelta(x, feetY, z, beltsOrSprint, maybeBelts) {
+  const belts = Array.isArray(beltsOrSprint) ? beltsOrSprint : maybeBelts;
+  if (!belts?.length) return null;
   for (let i = 0; i < belts.length; i++) {
     const belt = belts[i];
     if (!belt) continue;

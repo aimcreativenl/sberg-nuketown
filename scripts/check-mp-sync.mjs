@@ -195,20 +195,27 @@ assert(INPUT_HZ === 30, `INPUT_HZ === 30 (got ${INPUT_HZ})`);
   );
 }
 
-// ─── NetPawn sprint-rides conveyor belts ──────────────────────────────
+// ─── NetPawn rides conveyor belts without sprint (jump then land) ─────
 {
   const floorPad = { minX: -50, maxX: 50, minZ: -50, maxZ: 50, y: 0.48 };
   const belts = [
     { minX: 0, maxX: 40, minZ: -2, maxZ: 2, yMin: 0.2, yMax: 1.2, dirX: 1, dirZ: 0, speed: 3.2 },
   ];
   const pawn = new NetPawn({ id: 'p-belt', name: 'Belt', spawn: new THREE.Vector3(10, PLAYER_HEIGHT + 0.48, 0) });
-  pawn.grounded = true;
-  pawn.setInput(emptyInputFrame({ seq: 1, sprint: true, moveX: 0, moveZ: 0 }));
+  pawn.grounded = false;
+  pawn.velocity.y = 3.2;
+  pawn.setInput(emptyInputFrame({ seq: 1, sprint: false, moveX: 0, moveZ: 0 }));
   const x0 = pawn.position.x;
-  for (let i = 0; i < 40; i++) {
+  const frames = 40;
+  for (let i = 0; i < frames; i++) {
     pawn.stepMovement(1 / 60, { colliders: [], floors: [floorPad], belts });
   }
-  assert(pawn.position.x > x0 + 1.2, `NetPawn sprint-rides belt +X (Δ=${(pawn.position.x - x0).toFixed(2)})`);
+  const dx = pawn.position.x - x0;
+  const expected = 3.2 * (frames / 60);
+  assert(
+    dx > expected * 0.55,
+    `NetPawn rides belt +X without sprint after jump (Δ=${dx.toFixed(2)} expected~${expected.toFixed(2)})`
+  );
 }
 
 // ─── toSnap fields ─────────────────────────────────────────────────────

@@ -60,6 +60,13 @@ import { MpMatch } from '../net/MpMatch.js';
 import { getModeById } from '../modes/registry.js';
 import { flagsToNet } from '../modes/ctf.js';
 import { DEFAULT_MAP_ID, getMap, readStoredMapId, writeStoredMapId } from '../maps/index.js';
+import {
+  BOT_DIFFICULTY_IDS,
+  getBotDifficulty,
+  readStoredBotDifficulty,
+  setBotDifficulty,
+  writeStoredBotDifficulty,
+} from './BotDifficulty.js';
 import { brZoneFromMap, zoneRadiusAt, isOutsideZone } from '../modes/pubg.js';
 import { FlagManager } from './Flags.js';
 import { ZoneRing } from './Zone.js';
@@ -222,6 +229,7 @@ export class Game {
     this._bindPointerLockClick();
     const storedMap = readStoredMapId();
     if (storedMap !== this.mapId) this.loadMap(storedMap);
+    this._applyBotDifficulty(readStoredBotDifficulty(), { persist: false });
     this.ui.showStart();
     this._enterMenu();
     this._onResize = () => this._resize();
@@ -383,6 +391,27 @@ export class Game {
     foundry?.classList.toggle('is-on', id === 'candy-foundry');
     nuke?.setAttribute('aria-pressed', id === 'nuketown' ? 'true' : 'false');
     foundry?.setAttribute('aria-pressed', id === 'candy-foundry' ? 'true' : 'false');
+  }
+
+  /**
+   * @param {string} id
+   * @param {{ persist?: boolean }} [opts]
+   */
+  _applyBotDifficulty(id, opts = {}) {
+    const snap = setBotDifficulty(id);
+    if (opts.persist !== false) writeStoredBotDifficulty(snap.id);
+    this._syncDiffToggle();
+    return snap;
+  }
+
+  _syncDiffToggle() {
+    const current = getBotDifficulty().id;
+    for (const id of BOT_DIFFICULTY_IDS) {
+      const btn = document.getElementById(`btn-diff-${id}`);
+      const on = id === current;
+      btn?.classList.toggle('is-on', on);
+      btn?.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
   }
 
   /** Cinematic idle over the live map (start / after match return). */
@@ -648,6 +677,12 @@ export class Game {
       this.loadMap('candy-foundry');
     });
     this._syncMapToggle();
+    for (const id of BOT_DIFFICULTY_IDS) {
+      document.getElementById(`btn-diff-${id}`)?.addEventListener('click', () => {
+        this.audio.playUI();
+        this._applyBotDifficulty(id);
+      });
+    }
     document.getElementById('btn-resume')?.addEventListener('click', () => this.resume());
     document.getElementById('btn-restart')?.addEventListener('click', () => {
       if (this.mpMatch || this._mpActive) {
@@ -1190,6 +1225,7 @@ export class Game {
       ? localPawn.position.clone()
       : this._playerSpawn();
     this.player.fullMatchReset(spawn);
+    this.player.clearFireLatches();
     if (localPawn) {
       localPawn.yaw = this.player.yaw;
       localPawn.pitch = this.player.pitch;
@@ -1332,6 +1368,7 @@ export class Game {
 
     const spawn = this._playerSpawn();
     this.player.fullMatchReset(spawn);
+    this.player.clearFireLatches();
     this.weapons.resetAll();
     this.ui.hideVictory();
     this.ui.hideDeath();

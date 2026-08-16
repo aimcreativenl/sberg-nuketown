@@ -4,6 +4,8 @@
  */
 import * as THREE from 'three';
 import { WeaponController, LOADOUT } from '../src/game/Weapons.js';
+import { Player } from '../src/game/Player.js';
+import { PLAYER_HEIGHT } from '../src/game/constants.js';
 
 const failures = [];
 function assert(cond, msg) {
@@ -100,8 +102,12 @@ const switchToPistolShots = bufferedSwitch.update(
   true
 );
 assert(switchToPistolShots.length === 0, 'buffered pistol click does not fire on weapon switch');
-assert(semiFireCallsOnSwitch === 0, 'buffered pistol click is not consumed on weapon switch');
+assert(semiFireCallsOnSwitch === 1, 'buffered pistol click is discarded on weapon switch');
 assert(bufferedSwitch.ammoBySlot[0] === pistolAmmoBeforeSwitch, 'pistol ammo unchanged on click switch');
+const leftoverAfterSwitch = bufferedSwitch.update(1 / 60, makeInput({ shoot: false }), true);
+assert(leftoverAfterSwitch.length === 0, 'discarded switch click does not fire next frame');
+const freshAfterSwitch = bufferedSwitch.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
+assert(freshAfterSwitch.length === 1, 'fresh click after switch fires');
 
 // ── Fire pistol (semi): ammo -1, juice rises ─────────────────────────────
 const ammoBeforePistol = wc.currentAmmo;
@@ -270,6 +276,30 @@ assert(wc.isReloading() === true, 'dry-fire starts reload');
   );
   assert(muzzle.x < grip.x - 0.05, `muzzle inward of grip (${ndc.muzzle.x} < ${ndc.grip.x})`);
   globalThis.__viewmodelNdc = ndc;
+}
+
+// ── Match start leftover trigger (PLAY click / held LMB) ───────────────
+{
+  const startGun = new WeaponController(camera, null, null, null);
+  startGun.setLoadoutSlot(1);
+  startGun.resetAll();
+  const leftover = startGun.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
+  assert(leftover.length === 0, 'resetAll / match start swallows leftover shoot+click');
+  const stillHeld = startGun.update(1 / 60, makeInput({ shoot: true }), true);
+  assert(stillHeld.length === 0, 'held LMB after match start does not auto-fire');
+  startGun.update(1 / 60, makeInput({ shoot: false }), true);
+  const freshStart = startGun.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
+  assert(freshStart.length === 1, 'fresh trigger after match start fires');
+}
+
+{
+  const p = new Player(camera, {});
+  p.shootClicks = 2;
+  p.buttons.left = true;
+  p.buttons.right = true;
+  p.fullMatchReset(new THREE.Vector3(0, PLAYER_HEIGHT, 8));
+  assert(p.shootClicks === 0, 'fullMatchReset clears shootClicks');
+  assert(p.buttons.left === false, 'fullMatchReset clears held LMB');
 }
 
 const report = {
