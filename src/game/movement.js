@@ -199,6 +199,25 @@ export function pickFloorY(eyeY, height, x, z, floors, opts = {}) {
 }
 
 /**
+ * Moving-walkway carry (m/s). Only while sprinting and standing in the belt AABB.
+ * Do not add this into velocity — apply as a position delta so it does not compound.
+ * @returns {{ dx: number, dz: number }|null}
+ */
+export function beltCarryDelta(x, feetY, z, sprinting, belts) {
+  if (!sprinting || !belts?.length) return null;
+  for (let i = 0; i < belts.length; i++) {
+    const belt = belts[i];
+    if (!belt) continue;
+    if (x < belt.minX || x > belt.maxX || z < belt.minZ || z > belt.maxZ) continue;
+    if (feetY < (belt.yMin ?? -1e9) || feetY > (belt.yMax ?? 1e9)) continue;
+    const speed = Number(belt.speed);
+    if (!Number.isFinite(speed) || speed === 0) continue;
+    return { dx: (belt.dirX || 0) * speed, dz: (belt.dirZ || 0) * speed };
+  }
+  return null;
+}
+
+/**
  * Double-Space roof edge mantle — tight vertical reach, edge-only.
  * Must NOT fire for interior under-roof jumps (house footprint under main plate).
  *

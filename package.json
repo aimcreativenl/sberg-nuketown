@@ -52,7 +52,8 @@
     "test:phase-d-hud": "node scripts/check-phase-d-hud.mjs",
     "test:settings": "node scripts/check-settings.mjs",
     "test:touch-play": "node scripts/check-touch-play.mjs",
-    "test:menu-camera": "node scripts/check-menu-camera.mjs"
+    "test:menu-camera": "node scripts/check-menu-camera.mjs",
+    "test:candy-foundry": "node scripts/check-candy-foundry.mjs"
   },
   "devDependencies": {
     "vite": "^8.2.0"

@@ -13,7 +13,7 @@ import {
   PLAYER_MAX_HP,
   USE_RAPIER_PLAYER,
 } from '../game/constants.js';
-import { applyGroundWish, applyAirWish, pickFloorY, isStepableSolid } from '../game/movement.js';
+import { applyGroundWish, applyAirWish, pickFloorY, isStepableSolid, beltCarryDelta } from '../game/movement.js';
 import { playerMoveBlocked } from '../game/collision.js';
 
 const STEP_UP = 0.55;
@@ -58,6 +58,8 @@ export class NetPawn {
     this._rapier = null;
     /** Host: last time an input frame was accepted (ms). */
     this.lastInputAt = 0;
+    /** XZ clamp; Nuketown 38. MpMatch / world.bounds override for larger maps. */
+    this.mapBounds = 38;
   }
 
   /**
@@ -104,9 +106,30 @@ export class NetPawn {
   }
 
   /**
+   * Syrup AABB: scale wish, then cap horizontal speed (do not multiply velocity each frame).
+   * @param {number} x
+   * @param {number} feetY
+   * @param {number} z
+   * @param {{ slowZones?: Array<{minX:number,maxX:number,minZ:number,maxZ:number,yMin?:number,yMax?:number,speedMul?:number}> }} [world]
+   */
+  _slowZoneMul(x, feetY, z, world = {}) {
+    const zones = world.slowZones;
+    if (!zones?.length) return 1;
+    for (let i = 0; i < zones.length; i++) {
+      const zone = zones[i];
+      if (!zone) continue;
+      if (x < zone.minX || x > zone.maxX || z < zone.minZ || z > zone.maxZ) continue;
+      if (feetY < (zone.yMin ?? -1e9) || feetY > (zone.yMax ?? 1e9)) continue;
+      const mul = zone.speedMul;
+      if (Number.isFinite(mul) && mul > 0) return mul;
+    }
+    return 1;
+  }
+
+  /**
    * Host movement step using simplified Quake wish + legacy AABB OR Rapier if physics given.
    * @param {number} dt
-   * @param {{ colliders?: any[], floors?: any[], physics?: import('../physics/PhysicsManager.js').PhysicsManager|null, rapierHandle?: any }} world
+   * @param {{ colliders?: any[], floors?: any[], physics?: import('../physics/PhysicsManager.js').PhysicsManager|null, rapierHandle?: any, bounds?: number, slowZones?: any[] }} world
    */
   stepMovement(dt, world = {}) {
     if (!this.alive || dt <= 0) return;
@@ -136,6 +159,17 @@ export class NetPawn {
         wishX = wish.x;
         wishZ = wish.z;
       }
+    }
+
+    const slowMul = this._slowZoneMul(
+      this.position.x,
+      this.position.y - this.height,
+      this.position.z,
+      world
+    );
+    if (slowMul !== 1) {
+      wishX *= slowMul;
+      wishZ *= slowMul;
     }
 
     if (this.grounded) {
@@ -261,8 +295,31 @@ export class NetPawn {
       }
     }
 
-    next.x = THREE.MathUtils.clamp(next.x, -38, 38);
-    next.z = THREE.MathUtils.clamp(next.z, -38, 38);
+    const bRaw = world.bounds ?? this.mapBounds;
+    const b = Number.isFinite(bRaw) && bRaw > 0 ? bRaw : 38;
+    next.x = THREE.MathUtils.clamp(next.x, -b, b);
+    next.z = THREE.MathUtils.clamp(next.z, -b, b);
+
+    if (sprint && this.grounded) {
+      const ride = beltCarryDelta(next.x, next.y - this.height, next.z, true, world.belts);
+      if (ride) {
+        next.x += ride.dx * dt;
+        next.z += ride.dz * dt;
+        next.x = THREE.MathUtils.clamp(next.x, -b, b);
+        next.z = THREE.MathUtils.clamp(next.z, -b, b);
+      }
+    }
+
+    const feetMul = this._slowZoneMul(next.x, next.y - this.height, next.z, world);
+    if (feetMul < 1) {
+      const cap = speed * feetMul;
+      const h = Math.hypot(this.velocity.x, this.velocity.z);
+      if (h > cap && cap >= 0) {
+        const s = cap / h;
+        this.velocity.x *= s;
+        this.velocity.z *= s;
+      }
+    }
     if (next.y < -5) {
       next.set(0, this.height + 1, 8);
       this.velocity.set(0, 0, 0);

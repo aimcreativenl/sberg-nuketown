@@ -198,7 +198,7 @@ for v1. Host machine is authoritative (“server owns truth”).
 
 **Goal:** more places to fight, still one-composition pastel brand.
 
-- [ ] Second map (or Nuketown variant) behind `src/maps/` loader.
+- [x] Second map behind `src/maps/` loader + start-toggle. **Live:** Candy Foundry — [`src/maps/candy-foundry/STATUS.md`](src/maps/candy-foundry/STATUS.md).
 - [ ] Map vote / host map pick in lobby.
 - [ ] More weapons / streaks / cosmetics only if they don’t break MP authority.
 - [ ] Offline still first-class: PLAY vs bots on any unlocked map.

@@ -17,7 +17,6 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FXAAPass } from 'three/addons/postprocessing/FXAAPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { buildMap } from './MapBuilder.js';
 import { Player } from './Player.js';
 import { WeaponController, WEAPONS } from './Weapons.js';
 import { BotManager } from './BotAI.js';
@@ -60,7 +59,8 @@ import { OnlineSession } from '../net/OnlineSession.js';
 import { MpMatch } from '../net/MpMatch.js';
 import { getModeById } from '../modes/registry.js';
 import { flagsToNet } from '../modes/ctf.js';
-import { zoneRadiusAt, isOutsideZone } from '../modes/pubg.js';
+import { DEFAULT_MAP_ID, getMap, readStoredMapId, writeStoredMapId } from '../maps/index.js';
+import { brZoneFromMap, zoneRadiusAt, isOutsideZone } from '../modes/pubg.js';
 import { FlagManager } from './Flags.js';
 import { ZoneRing } from './Zone.js';
 
@@ -149,8 +149,10 @@ export class Game {
 
     this._initRenderer();
     this._initScene();
-    this.mapData = buildMap(this.scene);
-    this.doors = new DoorManager(this.mapData.doors || []);
+    this.mapId = null;
+    this.mapData = null;
+    this.doors = null;
+    this.loadMap(DEFAULT_MAP_ID, { persist: false });
     this.particles = new ParticleSystem(this.scene);
     this.particles.snowDust();
 
@@ -218,6 +220,8 @@ export class Game {
 
     this._bindUI();
     this._bindPointerLockClick();
+    const storedMap = readStoredMapId();
+    if (storedMap !== this.mapId) this.loadMap(storedMap);
     this.ui.showStart();
     this._enterMenu();
     this._onResize = () => this._resize();
@@ -243,6 +247,135 @@ export class Game {
     this.doors.onSolidChange = (collider, solid) => this.physics.setColliderSolid(collider, solid);
     this.player.setPhysics(this.physics);
     this.bots.setPhysics(this.physics);
+  }
+
+  /**
+   * Swap the live map pack. Default id is nuketown. If a pack `build()` throws,
+   * keep the previous map (Foundry builders are written; catch is a safety net).
+   * @param {string} id
+   * @param {{ persist?: boolean }} [opts]
+   */
+  loadMap(id, opts = {}) {
+    const persist = opts.persist !== false;
+    if (this.running) return this.mapData;
+
+    const pack = getMap(id);
+    if (pack.id === this.mapId && this.mapData) {
+      if (persist) writeStoredMapId(this.mapId);
+      this._syncMapToggle();
+      return this.mapData;
+    }
+
+    let next;
+    try {
+      next = pack.build(this.scene);
+    } catch (err) {
+      console.warn(`[maps] ${pack.id} failed to build, keeping ${this.mapId || DEFAULT_MAP_ID}`, err);
+      this._syncMapToggle();
+      if (!this.mapData && pack.id !== DEFAULT_MAP_ID) {
+        return this.loadMap(DEFAULT_MAP_ID, { persist: false });
+      }
+      return this.mapData;
+    }
+
+    if (this.mapData?.group && this.mapData.group !== next.group) {
+      this.mapData.dispose?.();
+      this.scene.remove(this.mapData.group);
+    }
+
+    this.mapData = next;
+    this.mapId = pack.id;
+    this.doors = new DoorManager(this.mapData.doors || []);
+    if (this.physics) {
+      this.physics.setMapFromMapData(this.mapData);
+      this.doors.onSolidChange = (collider, solid) => this.physics.setColliderSolid(collider, solid);
+    }
+    if (this.player) {
+      this.player.mapData = this.mapData;
+      this.player.mapBounds = this.mapData.bounds ?? 38;
+    }
+    if (this.bots) {
+      this.bots.mapData = this.mapData;
+      if (this.bots.cb) this.bots.cb.doors = this.doors;
+    }
+    this._applyMapFog(this.mapData);
+    this._applyMapPresentation(this.mapData);
+    if (persist) writeStoredMapId(this.mapId);
+    this._syncMapToggle();
+    return this.mapData;
+  }
+
+  /**
+   * Scale camera far, sky dome, menu orbit, and sun shadow to the live map wall.
+   * Nuketown wall 40; Candy Foundry wall 80 — far=180 clips the far hangar wall.
+   * @param {import('../maps/IMap.js').MapData} mapData
+   */
+  _applyMapPresentation(mapData) {
+    const wall = Number.isFinite(mapData?.wall) ? mapData.wall : 40;
+    const large = wall >= 70;
+    if (this.camera) {
+      this.camera.far = Math.max(180, wall * 3.2 + 40);
+      this.camera.updateProjectionMatrix();
+    }
+    if (this._skyMesh) {
+      const r = Math.max(130, wall * 2.2);
+      this._skyMesh.scale.setScalar(r / 130);
+    }
+    if (this.menuCam) {
+      if (large) {
+        this.menuCam.configure({
+          radius: 52,
+          height: 12,
+          lookY: 3.4,
+          center: new THREE.Vector3(0, 0, 0),
+        });
+      } else {
+        this.menuCam.configure({
+          radius: 30,
+          height: 10.5,
+          lookY: 2.6,
+          center: new THREE.Vector3(0, 0, 2),
+        });
+      }
+    }
+    if (this.sun?.shadow?.camera) {
+      const s = large ? 110 : 56;
+      const cam = this.sun.shadow.camera;
+      cam.left = -s;
+      cam.right = s;
+      cam.top = s;
+      cam.bottom = -s;
+      cam.far = large ? 280 : 150;
+      cam.updateProjectionMatrix();
+      this.sun.position.set(large ? 70 : 42, large ? 48 : 30, large ? 36 : 20);
+    }
+  }
+
+  /** @param {import('../maps/IMap.js').MapData} mapData */
+  _applyMapFog(mapData) {
+    const fog = mapData?.fog;
+    if (fog) {
+      const color = fog.color ?? GFX.fogColor ?? 0xdcb0c4;
+      this.scene.fog = new THREE.Fog(color, fog.near ?? GFX.fogNear ?? 52, fog.far ?? GFX.fogFar ?? 122);
+      this.scene.background = new THREE.Color(color);
+    } else {
+      this.scene.fog = new THREE.Fog(
+        GFX.fogColor ?? 0xdcb0c4,
+        GFX.fogNear ?? 52,
+        GFX.fogFar ?? 122
+      );
+      this.scene.background = new THREE.Color(GFX.fogColor ?? 0xdcb0c4);
+    }
+  }
+
+  _syncMapToggle() {
+    const id = this.mapId || DEFAULT_MAP_ID;
+    const nuke = document.getElementById('btn-map-nuketown');
+    const foundry = document.getElementById('btn-map-foundry');
+    nuke?.classList.toggle('is-on', id === 'nuketown');
+    foundry?.classList.toggle('is-on', id === 'candy-foundry');
+    nuke?.setAttribute('aria-pressed', id === 'nuketown' ? 'true' : 'false');
+    foundry?.setAttribute('aria-pressed', id === 'candy-foundry' ? 'true' : 'false');
   }
 
   /** Cinematic idle over the live map (start / after match return). */
@@ -378,6 +511,7 @@ export class Game {
     });
     const skyMesh = new THREE.Mesh(skyGeo, skyMat);
     skyMesh.name = 'sky_golden_hour';
+    this._skyMesh = skyMesh;
     this.scene.add(skyMesh);
 
     // near=0.02 lets the FP stock sit against the camera without eating the grip
@@ -498,6 +632,15 @@ export class Game {
 
   _bindUI() {
     document.getElementById('btn-play')?.addEventListener('click', () => this.startMatch());
+    document.getElementById('btn-map-nuketown')?.addEventListener('click', () => {
+      this.audio.playUI();
+      this.loadMap('nuketown');
+    });
+    document.getElementById('btn-map-foundry')?.addEventListener('click', () => {
+      this.audio.playUI();
+      this.loadMap('candy-foundry');
+    });
+    this._syncMapToggle();
     document.getElementById('btn-resume')?.addEventListener('click', () => this.resume());
     document.getElementById('btn-restart')?.addEventListener('click', () => {
       if (this.mpMatch || this._mpActive) {
@@ -994,7 +1137,7 @@ export class Game {
     this.paused = false;
     this.running = true;
     this.donuts.clear();
-    this.medkits.spawnDefault();
+    this.medkits.spawnDefault(this.mapData?.medkitSpots);
     this.bots.clear();
     this._disposeFlags();
     this._disposeZone();
@@ -1032,7 +1175,7 @@ export class Game {
       if (this.mpMatch.ctf) this.flags.applyNet(flagsToNet(this.mpMatch.ctf));
     }
     if (this.zoneRing) {
-      this.zoneRing.setRadius(this.mpMatch.zone?.r ?? zoneRadiusAt(0));
+      this.zoneRing.setRadius(this.mpMatch.zone?.r ?? zoneRadiusAt(0, brZoneFromMap(this.mapData)));
     }
 
     const localPawn = this.mpMatch.pawns.get(localId);
@@ -1175,7 +1318,7 @@ export class Game {
     this.paused = false;
     this.running = true;
     this.donuts.clear();
-    this.medkits.spawnDefault();
+    this.medkits.spawnDefault(this.mapData?.medkitSpots);
     this.bots.spawnAll(BOT_COUNT);
     this._disposeFlags();
     this._disposeZone();
@@ -1337,8 +1480,10 @@ export class Game {
     // ground grid before ever accepting a trapped authored point as fallback.
     if (!pool.length) {
       const rescue = [];
-      for (let x = -34; x <= 34; x += 2) {
-        for (let z = -34; z <= 34; z += 2) {
+      const limit = Math.max(34, Math.floor((this.mapData?.bounds ?? 38) - 4));
+      const step = limit > 40 ? 4 : 2;
+      for (let x = -limit; x <= limit; x += step) {
+        for (let z = -limit; z <= limit; z += step) {
           const entry = scorePoint(new THREE.Vector3(x, PLAYER_HEIGHT, z));
           if (entry.clear && entry.openDirections >= PLAYER_SPAWN_MIN_OPEN_DIRECTIONS) {
             rescue.push(entry);
@@ -1373,6 +1518,7 @@ export class Game {
   _loop() {
     requestAnimationFrame(this._loop);
     const dt = Math.min(this.clock.getDelta(), 0.05);
+    this.mapData?.tick?.(dt);
 
     if (this.running && !this.paused && !this.matchOver) {
       if (this._mpWakeGrace > 0) this._mpWakeGrace = Math.max(0, this._mpWakeGrace - dt);

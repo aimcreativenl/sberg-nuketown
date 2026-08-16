@@ -141,6 +141,76 @@ assert(INPUT_HZ === 30, `INPUT_HZ === 30 (got ${INPUT_HZ})`);
   );
 }
 
+// ─── NetPawn XZ clamp follows world.bounds (Candy Foundry ≠ 38) ────────
+{
+  const floorPad = {
+    minX: -90,
+    maxX: 90,
+    minZ: -90,
+    maxZ: 90,
+    y: 0,
+  };
+  const pawn = new NetPawn({
+    id: 'p-bounds',
+    name: 'Bounds',
+    spawn: new THREE.Vector3(50, PLAYER_HEIGHT, 0),
+  });
+  pawn.stepMovement(1 / 60, { colliders: [], floors: [floorPad] });
+  assert(
+    pawn.position.x <= 38 + 1e-4,
+    `default clamp stays ≤38; got ${pawn.position.x.toFixed(3)}`
+  );
+
+  const wide = new NetPawn({
+    id: 'p-wide',
+    name: 'Wide',
+    spawn: new THREE.Vector3(50, PLAYER_HEIGHT, 0),
+  });
+  wide.stepMovement(1 / 60, { colliders: [], floors: [floorPad], bounds: 80 });
+  assert(
+    Math.abs(wide.position.x - 50) < 0.05,
+    `bounds:80 should keep x=50; got ${wide.position.x.toFixed(3)}`
+  );
+}
+
+// ─── NetPawn slowZones (Foundry syrup) — scale wish + cap, no compound ─
+{
+  const floorPad = { minX: -50, maxX: 50, minZ: -50, maxZ: 50, y: 0 };
+  const zone = { minX: -10, maxX: 10, minZ: -10, maxZ: 10, yMin: -1, yMax: 1.2, speedMul: 0.42 };
+  const dry = new NetPawn({ id: 'p-dry', name: 'Dry', spawn: new THREE.Vector3(20, PLAYER_HEIGHT, 0) });
+  dry.setInput(emptyInputFrame({ seq: 1, moveZ: -1, yaw: 0 }));
+  const wet = new NetPawn({ id: 'p-wet', name: 'Wet', spawn: new THREE.Vector3(0, PLAYER_HEIGHT, 0) });
+  wet.setInput(emptyInputFrame({ seq: 1, moveZ: -1, yaw: 0 }));
+  const dt = 1 / 60;
+  for (let i = 0; i < 45; i++) {
+    dry.stepMovement(dt, { colliders: [], floors: [floorPad], slowZones: [zone] });
+    wet.stepMovement(dt, { colliders: [], floors: [floorPad], slowZones: [zone] });
+  }
+  const dryDist = Math.abs(dry.position.z);
+  const wetDist = Math.abs(wet.position.z);
+  assert(dryDist > 3, `dry NetPawn should walk (got ${dryDist.toFixed(2)})`);
+  assert(
+    wetDist > 0.8 && wetDist < dryDist * 0.65,
+    `slowZone should slow remotes (dry=${dryDist.toFixed(2)} wet=${wetDist.toFixed(2)})`
+  );
+}
+
+// ─── NetPawn sprint-rides conveyor belts ──────────────────────────────
+{
+  const floorPad = { minX: -50, maxX: 50, minZ: -50, maxZ: 50, y: 0.48 };
+  const belts = [
+    { minX: 0, maxX: 40, minZ: -2, maxZ: 2, yMin: 0.2, yMax: 1.2, dirX: 1, dirZ: 0, speed: 3.2 },
+  ];
+  const pawn = new NetPawn({ id: 'p-belt', name: 'Belt', spawn: new THREE.Vector3(10, PLAYER_HEIGHT + 0.48, 0) });
+  pawn.grounded = true;
+  pawn.setInput(emptyInputFrame({ seq: 1, sprint: true, moveX: 0, moveZ: 0 }));
+  const x0 = pawn.position.x;
+  for (let i = 0; i < 40; i++) {
+    pawn.stepMovement(1 / 60, { colliders: [], floors: [floorPad], belts });
+  }
+  assert(pawn.position.x > x0 + 1.2, `NetPawn sprint-rides belt +X (Δ=${(pawn.position.x - x0).toFixed(2)})`);
+}
+
 // ─── toSnap fields ─────────────────────────────────────────────────────
 {
   const pawn = new NetPawn({
@@ -396,6 +466,9 @@ console.log(`check-mp-sync OK (${[
   'sampleInputFrame',
   'NetPawn.setInput',
   'NetPawn.stepMovement',
+  'NetPawn.bounds',
+  'NetPawn.slowZones',
+  'NetPawn.belts',
   'toSnap',
   'InputHistory',
   'PoseHistory',

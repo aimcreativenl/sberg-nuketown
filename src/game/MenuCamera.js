@@ -31,6 +31,17 @@ export class MenuCamera {
     this._look = new THREE.Vector3();
   }
 
+  /**
+   * Retune orbit for a different map scale (Nuketown r≈30, Foundry hangar r≈52).
+   * @param {{ radius?: number, height?: number, lookY?: number, center?: THREE.Vector3 }} opts
+   */
+  configure(opts = {}) {
+    if (Number.isFinite(opts.radius) && opts.radius > 0) this.radius = opts.radius;
+    if (Number.isFinite(opts.height)) this.height = opts.height;
+    if (Number.isFinite(opts.lookY)) this.lookY = opts.lookY;
+    if (opts.center) this.center.copy(opts.center);
+  }
+
   start() {
     this.active = true;
     this.t = 0;

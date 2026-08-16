@@ -52,20 +52,24 @@ export class MedkitManager {
     this.promptActive = false;
   }
 
-  spawnDefault() {
+  /**
+   * @param {Array<{x:number,y:number,z:number}|import('three').Vector3>} [spots]
+   *   Map-authored pads. Omit / empty → historic Nuketown coordinates.
+   */
+  spawnDefault(spots) {
     this.clear();
-    // Two fixed pastel-map spots (away from spawn mid)
-    const spots = [
-      new THREE.Vector3(-20, 0.35, 12),
-      new THREE.Vector3(20, 0.35, -12),
-    ];
-    for (const pos of spots) {
+    const list =
+      Array.isArray(spots) && spots.length
+        ? spots
+        : [new THREE.Vector3(-20, 0.35, 12), new THREE.Vector3(20, 0.35, -12)];
+    for (const pos of list) {
+      const p = new THREE.Vector3(pos.x ?? 0, pos.y ?? 0.35, pos.z ?? 0);
       const mesh = makeMedkitMesh();
-      mesh.position.copy(pos);
+      mesh.position.copy(p);
       this.scene.add(mesh);
       this.kits.push({
         mesh,
-        position: pos.clone(),
+        position: p.clone(),
         alive: true,
         bob: Math.random() * Math.PI * 2,
       });

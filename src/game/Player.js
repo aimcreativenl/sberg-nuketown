@@ -19,6 +19,7 @@ import {
   tryRoofMantle,
   pickFloorY,
   isStepableSolid,
+  beltCarryDelta,
 } from './movement.js';
 import { playerMoveBlocked } from './collision.js';
 import { getSettings, lookScale } from '../settings/Settings.js';
@@ -31,6 +32,8 @@ export class Player {
   constructor(camera, mapData) {
     this.camera = camera;
     this.mapData = mapData;
+    /** Arena XZ clamp. Game.loadMap keeps this in sync with mapData.bounds. */
+    this.mapBounds = mapData?.bounds ?? 38;
     this.position = new THREE.Vector3(0, PLAYER_HEIGHT, 8);
     this.velocity = new THREE.Vector3();
     this.yaw = 0;
@@ -265,6 +268,32 @@ export class Player {
     return new THREE.Vector3(0, 0, -1).applyEuler(e).normalize();
   }
 
+  /** Player XZ clamp from mapData.bounds (Nuketown 38). */
+  _arenaBounds() {
+    const b = this.mapBounds ?? this.mapData?.bounds;
+    return Number.isFinite(b) && b > 0 ? b : 38;
+  }
+
+  /**
+   * Syrup / water AABB: scale wish while feet Y is in the band.
+   * @param {number} x
+   * @param {number} feetY
+   * @param {number} z
+   */
+  _slowZoneMul(x, feetY, z) {
+    const zones = this.mapData?.slowZones;
+    if (!zones?.length) return 1;
+    for (let i = 0; i < zones.length; i++) {
+      const zone = zones[i];
+      if (!zone) continue;
+      if (x < zone.minX || x > zone.maxX || z < zone.minZ || z > zone.maxZ) continue;
+      if (feetY < (zone.yMin ?? -1e9) || feetY > (zone.yMax ?? 1e9)) continue;
+      const mul = zone.speedMul;
+      if (Number.isFinite(mul) && mul > 0) return mul;
+    }
+    return 1;
+  }
+
   update(dt, colliders, floors, agents = []) {
     if (!this.alive) {
       this.camera.position.copy(this.position);
@@ -308,6 +337,16 @@ export class Player {
         wishX = wish.x;
         wishZ = wish.z;
       }
+    }
+
+    const slowMul = this._slowZoneMul(
+      this.position.x,
+      this.position.y - this.height,
+      this.position.z
+    );
+    if (slowMul !== 1) {
+      wishX *= slowMul;
+      wishZ *= slowMul;
     }
 
     // Horizontal: accel/friction on ground, limited air control in air
@@ -546,9 +585,37 @@ export class Player {
       }
     }
 
-    // Keep inside perimeter walls (MAP_WALL ≈ 40)
-    next.x = THREE.MathUtils.clamp(next.x, -38, 38);
-    next.z = THREE.MathUtils.clamp(next.z, -38, 38);
+    // Keep inside perimeter walls (mapData.bounds; Nuketown = 38)
+    const bound = this._arenaBounds();
+    next.x = THREE.MathUtils.clamp(next.x, -bound, bound);
+    next.z = THREE.MathUtils.clamp(next.z, -bound, bound);
+
+    if (sprint && this.grounded) {
+      const ride = beltCarryDelta(
+        next.x,
+        next.y - this.height,
+        next.z,
+        true,
+        this.mapData?.belts
+      );
+      if (ride) {
+        next.x += ride.dx * dt;
+        next.z += ride.dz * dt;
+        next.x = THREE.MathUtils.clamp(next.x, -bound, bound);
+        next.z = THREE.MathUtils.clamp(next.z, -bound, bound);
+      }
+    }
+
+    const feetMul = this._slowZoneMul(next.x, next.y - this.height, next.z);
+    if (feetMul < 1) {
+      const cap = speed * feetMul;
+      const h = Math.hypot(this.velocity.x, this.velocity.z);
+      if (h > cap && cap >= 0) {
+        const s = cap / h;
+        this.velocity.x *= s;
+        this.velocity.z *= s;
+      }
+    }
     if (next.y < -5) {
       next.set(0, this.height + 1, 8);
       this.velocity.set(0, 0, 0);

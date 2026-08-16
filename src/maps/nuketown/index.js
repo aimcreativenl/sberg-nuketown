@@ -1,7 +1,6 @@
 /**
- * Phase 0 stub — wraps the existing `buildMap()` behind the `IMap` contract so
- * future map packs can be swapped in later without touching `Game.js`. Not wired
- * in yet; `Game.js` still imports `buildMap` directly from `MapBuilder.js`.
+ * Nuketown pack — wraps existing `buildMap()` behind the IMap contract.
+ * `bounds: 38` matches the historic Player clamp (MAP_WALL ≈ 40).
  */
 import { buildMap } from '../../game/MapBuilder.js';
 
@@ -10,6 +9,12 @@ export const MAP_NUKETOWN = {
   id: 'nuketown',
   name: "S'Berg Nuketown",
   build(scene) {
-    return buildMap(scene);
+    const data = buildMap(scene);
+    return {
+      ...data,
+      id: 'nuketown',
+      bounds: 38,
+      wall: 40,
+    };
   },
 };

@@ -9,7 +9,7 @@ import {
   flagsToNet,
   applyFlagsNet,
 } from '../modes/ctf.js';
-import { BR_ZONE, zoneRadiusAt, isOutsideZone } from '../modes/pubg.js';
+import { BR_ZONE, brZoneFromMap, zoneRadiusAt, isOutsideZone } from '../modes/pubg.js';
 import {
   NET_MSG,
   SNAPSHOT_HZ,
@@ -147,11 +147,12 @@ export class MpMatch {
     this.zone = null;
     this._zoneDmgAcc = 0;
     if (this.mode?.id === 'pubg') {
+      const zone = brZoneFromMap(this.mapData);
       this.zone = {
-        r: zoneRadiusAt(0),
+        r: zoneRadiusAt(0, zone),
         t: 0,
-        cx: BR_ZONE.centerX,
-        cz: BR_ZONE.centerZ,
+        cx: zone.centerX ?? BR_ZONE.centerX,
+        cz: zone.centerZ ?? BR_ZONE.centerZ,
       };
       this.getZone?.()?.setRadius(this.zone.r);
     }
@@ -257,6 +258,9 @@ export class MpMatch {
       colliders: ctx.colliders || this.mapData?.colliders || [],
       floors: ctx.floors || this.mapData?.floors || [],
       physics: this.physics,
+      bounds: this.mapData?.bounds ?? 38,
+      slowZones: this.mapData?.slowZones || [],
+      belts: this.mapData?.belts || [],
     };
 
     // 1. Sample local input → local pawn (peek reload; claim E for host door authority)
@@ -567,12 +571,13 @@ export class MpMatch {
   _hostZone(dt) {
     if (this.mode?.id !== 'pubg' || this._matchEnded) return;
     this.matchTime += dt;
-    const r = zoneRadiusAt(this.matchTime);
+    const zone = brZoneFromMap(this.mapData);
+    const r = zoneRadiusAt(this.matchTime, zone);
     this.zone = {
       r,
       t: this.matchTime,
-      cx: BR_ZONE.centerX,
-      cz: BR_ZONE.centerZ,
+      cx: zone.centerX ?? BR_ZONE.centerX,
+      cz: zone.centerZ ?? BR_ZONE.centerZ,
     };
     this.getZone?.()?.setRadius(r);
 
@@ -580,7 +585,7 @@ export class MpMatch {
     const tick = 0.45;
     if (this._zoneDmgAcc < tick) return;
     this._zoneDmgAcc %= tick;
-    const dmg = BR_ZONE.dps * tick;
+    const dmg = (zone.dps ?? BR_ZONE.dps) * tick;
     let killedAny = false;
     for (const pawn of this.pawns.values()) {
       if (!pawn.alive) continue;

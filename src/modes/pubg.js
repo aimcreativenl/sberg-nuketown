@@ -23,6 +23,17 @@ export const BR_ZONE = {
 };
 
 /**
+ * Map pack BR circle, or the Nuketown MODE default.
+ * @param {{ brZone?: typeof BR_ZONE }|null|undefined} mapData
+ * @returns {typeof BR_ZONE}
+ */
+export function brZoneFromMap(mapData) {
+  const zone = mapData?.brZone;
+  if (zone && Array.isArray(zone.stages) && zone.stages.length) return zone;
+  return BR_ZONE;
+}
+
+/**
  * Interpolated safe-zone radius at match time `t` (seconds).
  * @param {number} t
  * @param {typeof BR_ZONE} [zone]

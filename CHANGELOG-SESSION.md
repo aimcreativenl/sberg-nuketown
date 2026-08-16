@@ -3,10 +3,57 @@
 **Project (actueel):** `C:\Users\Gebruiker\Documents\Sbarg Nuketown`
 **Stack:** Three.js r185 + Vite (vanilla JS modules) + Rapier + ws  
 **Play:** `npm run dev` → **http://127.0.0.1:5175/** · Progress: http://127.0.0.1:8766/ · Live: https://sberg-nuketown.vercel.app/
-**Laatst bijgewerkt:** 2026-08-09
+**Laatst bijgewerkt:** 2026-08-16
 
 > **Voor AI-agents:** lees eerst **`CONTINUITY.md`** (dan `HANDOFF.md` / `ROADMAP.md`).  
 > Dit CHANGELOG is chronologisch; oudere secties kunnen verouderd zijn.
+
+---
+
+---
+
+## 2026-08-16 — Candy Foundry live (this push)
+
+Syrup Canal Foundry: start-toggle, flowing canals, tasting kiosk, moving conveyor, NetPawn slowZones/belts. Default map remains nuketown.
+
+## 2026-08-16 — Candy Foundry lokaal play-ready (uncommitted)
+
+- Pretzel zuidbank: `walkAabb` miste `x` → NaN colliders, Rapier crash. Fix + per-flight `chain`.
+- Rapier-walks in `test:candy-foundry`: L2 3.47, pretzel 4.62, canal ×0.42, gumdrop y=0.56.
+- Interieurlichten 22 candela; extra decor. `NetPawn` slowZones.
+- Browser: Foundry PLAY (deuren, L2, pretzel, gumdrop, 9 bots) + Nuketown PLAY na switch.
+- Tests: `test:candy-foundry` `test:player-spawns` `test:map` `test:mp-sync` `build` groen.
+- Niet gecommit. Pickup: `src/maps/candy-foundry/STATUS.md`.
+
+## 2026-08-16 — Candy Foundry playtest pass (~85% local)
+
+Uncommitted. Pickup: `src/maps/candy-foundry/STATUS.md`.
+
+- Headless `build()` + door walk-in in `test:candy-foundry` (491 colliders, 87 spawns, 4 doors).
+- Camera/sky/menu/sun scale with `mapData.wall`; spawn rescue uses `bounds`.
+- Hangar PointLights raised for Three r185 candela; fog 72/240.
+- Browser: Foundry toggle, Sweet Co + Sugar Works interiors, Nuketown menu restore.
+- `NetPawn` clamp uses `mapData.bounds`.
+- Next: pretzel climb, canal feel, commit only if asked.
+
+Uncommitted. Pickup: `src/maps/candy-foundry/STATUS.md`.
+
+- Concept 4 Syrup Canal Foundry; 2× Nuketown (`MAP_WALL` 80); Sweet Co + Sugar Works interiors.
+- Loader in `Game.loadMap` + start-toggle. `shell.js`, `buildings.js`, **and** `yard.js` are written (no throw stubs).
+- **Next:** in-game playtest (Foundry toggle, walk into both buildings, bridges/stairs), then Nuketown PLAY regression. Commit only if asked.
+- Follow-up from loader agent: `NetPawn` XZ clamp uses `mapData.bounds` (Foundry remotes were stuck at ±38).
+
+---
+
+## 2026-08-16 — Phone landscape + tap-to-shoot (`eae3178`)
+
+Live push naar `main` / Vercel.
+
+- **Start landscape:** S'BERG clipte; PLAY-box-shadow tekende een zwarte balk over de map. Twee-koloms hero onder `@media (orientation: landscape) and (max-height: 600px)`; `100dvh`; canvas-resize op `clientWidth` / `visualViewport`.
+- **M16 swap:** look-pad lag over `#weapon-banner`. Banner `z-index: 45` + look-pad `top: 88px`; tap togglet slot 0 ↔ 1.
+- **Schieten:** FIRE-knop verwijderd. Rechter look-pad: drag = kijken, tap (`isLookTap`) = `shootClicks`. M16 vuurt ook op `shootClick`; MP-input telt taps als `fire`.
+- Tests: `test:touch-play`, `test:phase-a-weapons`, `test:phase-d-hud`, `test:mp-sync`, `test:menu-camera`, `build`.
+- Niet in git: `.playwright-mcp/`, `scripts/_vm-verify/`, `verify-viewmodel.mjs`, key-art PNG, `task6-hud.png`.
 
 ---
 
