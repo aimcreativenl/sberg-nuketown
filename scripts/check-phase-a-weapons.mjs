@@ -109,6 +109,52 @@ assert(leftoverAfterSwitch.length === 0, 'discarded switch click does not fire n
 const freshAfterSwitch = bufferedSwitch.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
 assert(freshAfterSwitch.length === 1, 'fresh click after switch fires');
 
+// Stuck latch: Game keeps passing shootClick every frame until onSemiFire runs.
+// After a switch, that leftover click must not permanently disable both guns.
+const jammed = new WeaponController(camera, null, null, null);
+let queuedClicks = 1;
+jammed.update(
+  1 / 60,
+  makeInput({
+    weaponSlot: 1,
+    shoot: true,
+    shootClick: true,
+    onSemiFire: () => {
+      queuedClicks = Math.max(0, queuedClicks - 1);
+    },
+  }),
+  true
+);
+queuedClicks = 1;
+let jammedShots = 0;
+for (let i = 0; i < 6; i++) {
+  const held = jammed.update(
+    1 / 60,
+    makeInput({
+      shoot: true,
+      shootClick: queuedClicks > 0,
+      onSemiFire: () => {
+        queuedClicks = Math.max(0, queuedClicks - 1);
+      },
+    }),
+    true
+  );
+  jammedShots += held.length;
+}
+assert(jammedShots === 0, `held leftover click after switch does not auto-fire (got ${jammedShots})`);
+assert(queuedClicks === 0, 'leftover switch click is drained while ignore is held');
+assert(jammed._ignoreHeldTrigger === true, 'held trigger still ignored after switch');
+const released = jammed.update(1 / 60, makeInput({ shoot: false, shootClick: false }), true);
+assert(released.length === 0, 'release after jammed switch does not fire');
+assert(jammed._ignoreHeldTrigger === false, 'ignore latch clears on trigger release');
+const unjammed = jammed.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
+assert(unjammed.length === 1, 'fresh click after jammed switch fires again');
+jammed.setLoadoutSlot(0);
+const otherGun = jammed.update(1 / 60, makeInput({ shoot: false }), true);
+assert(otherGun.length === 0, 'swap after unjam is quiet');
+const otherGunFire = jammed.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);
+assert(otherGunFire.length === 1, 'other gun still fires after the jam sequence');
+
 // ── Fire pistol (semi): ammo -1, juice rises ─────────────────────────────
 const ammoBeforePistol = wc.currentAmmo;
 const shotsP = wc.update(1 / 60, makeInput({ shoot: true, shootClick: true }), true);

@@ -75,18 +75,30 @@ export function buildCandyFoundry(scene) {
       tickSyrupFlows(flows, dt);
       for (let i = 0; i < conveyors.length; i++) conveyors[i].tick?.(dt);
     },
-    syncLights(focus) {
+    syncLights(focus, opts = {}) {
       if (!focus || !lights.length) return;
       const fx = focus.x;
       const fz = focus.z;
+      const max =
+        Number.isFinite(opts.maxPointLights) && opts.maxPointLights >= 0
+          ? opts.maxPointLights
+          : lights.length;
+      const scale = opts.lightDistanceScale ?? 1;
+      const ranked = [];
       for (let i = 0; i < lights.length; i++) {
         const L = lights[i];
         L.getWorldPosition(lightWorld);
-        const pad = L.userData.cullPad ?? 12;
-        const reach = (L.distance || 20) + pad;
         const dx = lightWorld.x - fx;
         const dz = lightWorld.z - fz;
-        L.visible = dx * dx + dz * dz < reach * reach;
+        const d2 = dx * dx + dz * dz;
+        const pad = L.userData.cullPad ?? 12;
+        const reach = ((L.distance || 20) + pad) * scale;
+        ranked.push({ L, d2, reach2: reach * reach });
+      }
+      ranked.sort((a, b) => a.d2 - b.d2);
+      for (let i = 0; i < ranked.length; i++) {
+        const s = ranked[i];
+        s.L.visible = i < max && s.d2 < s.reach2;
       }
     },
     dispose() {

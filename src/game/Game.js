@@ -165,6 +165,7 @@ export class Game {
     }
     this._perfAcc = 0;
     this._perfFrames = 0;
+    this._gfx = null;
     this._botAgents = [];
     this._playerPosScratch = new THREE.Vector3();
 
@@ -587,8 +588,9 @@ export class Game {
     this.sun.name = 'sun_key';
     // Slightly lower sun = longer golden-hour soft shadows across the yard
     this.sun.position.set(42, 30, 20);
-    this.sun.castShadow = true;
-    const sm = getGraphicsPreset().shadowMapSize || GFX.shadowMapSize;
+    const gfx0 = getGraphicsPreset();
+    this.sun.castShadow = !!gfx0.shadowsEnabled;
+    const sm = gfx0.shadowMapSize || GFX.shadowMapSize;
     this.sun.shadow.mapSize.set(sm, sm);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 150;
@@ -681,11 +683,64 @@ export class Game {
     this.fxaaPass.setSize(cssW * pr, cssH * pr);
   }
 
-  /** Bloom at half backing-store size — same glow, far less fill. */
+  /** Bloom backing-store scale comes from the active device preset. */
   _syncBloomResolution(cssW, cssH) {
     if (!this._bloomPass?.setSize) return;
     const pr = this.renderer.getPixelRatio();
-    this._bloomPass.setSize(Math.max(1, cssW * pr * 0.5), Math.max(1, cssH * pr * 0.5));
+    const scale = this._gfx?.bloomResolutionScale ?? getGraphicsPreset().bloomResolutionScale ?? 0.5;
+    this._bloomPass.setSize(Math.max(1, cssW * pr * scale), Math.max(1, cssH * pr * scale));
+  }
+
+  /**
+   * Apply a resolved quality row (from getGraphicsPreset). Low actually turns
+   * shadows + composer off; Ultra is the expensive path for this device.
+   */
+  applyGraphicsQuality(preset = getGraphicsPreset()) {
+    if (!preset || !this.renderer) return;
+    this._gfx = preset;
+    if (this.bots) this.bots.cpuTier = preset.cpuTier ?? 2;
+
+    const dpr = (typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1;
+    this.renderer.setPixelRatio(Math.min(dpr, preset.pixelRatioCap ?? 1));
+
+    const shadowsOn = !!preset.shadowsEnabled;
+    this.renderer.shadowMap.enabled = shadowsOn;
+    const type = preset.shadowType;
+    if (type === 'basic') this.renderer.shadowMap.type = THREE.BasicShadowMap;
+    else if (type === 'pcf') this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    else this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const sun = this.sun;
+    if (sun) {
+      sun.castShadow = shadowsOn;
+      const sm = Math.max(256, preset.shadowMapSize || 1024);
+      if (sun.shadow?.mapSize) {
+        if (sun.shadow.mapSize.x !== sm || sun.shadow.mapSize.y !== sm) {
+          sun.shadow.mapSize.set(sm, sm);
+          if (sun.shadow.map) {
+            sun.shadow.map.dispose();
+            sun.shadow.map = null;
+          }
+        }
+      }
+    }
+
+    this._postEnabled = !!preset.postEnabled && !!this.composer;
+    if (this._bloomPass) {
+      if (typeof this.__baseBloomStrength !== 'number') {
+        this.__baseBloomStrength = this._bloomPass.strength;
+      }
+      this._bloomPass.enabled = !!preset.bloomEnabled && this._postEnabled;
+      this._bloomPass.strength = this.__baseBloomStrength * (preset.bloomStrengthScale ?? 1);
+    }
+    if (this.fxaaPass) this.fxaaPass.enabled = !!preset.fxaaEnabled && this._postEnabled;
+
+    if (this.particles && 'particleDensity' in this.particles) {
+      this.particles.particleDensity = preset.particles ?? 1;
+    }
+    this.__aoEnabled = !!preset.aoEnabled;
+
+    this._resize();
   }
 
   _bindUI() {
@@ -1316,6 +1371,14 @@ export class Game {
       if (vol) vol.value = pct(s.volume);
       if (mute) mute.checked = !!s.muted;
       if (gfx) gfx.value = s.graphicsPreset;
+      const gfxHint = document.getElementById('graphics-preset-hint');
+      if (gfxHint) {
+        const q = getGraphicsPreset();
+        const device = q.device === 'phone' ? 'Phone' : q.device === 'tablet' ? 'Tablet' : 'Desktop';
+        const shadow = q.shadowsEnabled ? `shadows ${q.shadowMapSize}` : 'no shadows';
+        const glow = q.bloomEnabled ? 'bloom on' : q.postEnabled ? 'FXAA only' : 'no glow';
+        gfxHint.textContent = `${device} · ${shadow} · ${glow}`;
+      }
       const mouseVal = document.getElementById('sens-mouse-val');
       const adsVal = document.getElementById('sens-ads-val');
       const touchVal = document.getElementById('sens-touch-val');
@@ -1590,7 +1653,10 @@ export class Game {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.mapData?.tick?.(dt);
     const lightFocus = this.running && this.player?.position ? this.player.position : this.camera?.position;
-    this.mapData?.syncLights?.(lightFocus);
+    this.mapData?.syncLights?.(lightFocus, {
+      maxPointLights: this._gfx?.maxPointLights,
+      lightDistanceScale: this._gfx?.lightDistanceScale,
+    });
 
     if (this.running && !this.paused && !this.matchOver) {
       if (this._mpWakeGrace > 0) this._mpWakeGrace = Math.max(0, this._mpWakeGrace - dt);
@@ -1716,6 +1782,7 @@ export class Game {
 
     // Weapons
     const weaponSlot = this.player.alive ? this.player.consumeWeaponSlot() : null;
+    if (weaponSlot === 0 || weaponSlot === 1) this.player.shootClicks = 0;
     const scopeClick = this.player.alive ? this.player.consumeScopeClick() : false;
     const scopeZoomDelta = this.player.alive ? this.player.consumeScopeZoomDelta() : 0;
     const combatOk = isCombatLive(this.matchFlow) && this.player.alive;

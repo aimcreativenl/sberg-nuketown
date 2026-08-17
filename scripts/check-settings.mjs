@@ -10,8 +10,11 @@ import {
   setGraphicsPreset,
   lookScale,
   GRAPHICS_PRESETS,
+  GRAPHICS_QUALITY,
+  resolveGraphicsQuality,
   applyToGame,
 } from '../src/settings/Settings.js';
+import { getPlayDevice } from '../src/input/detectPlayMode.js';
 
 const failures = [];
 function assert(cond, msg) {
@@ -46,6 +49,47 @@ setGraphicsPreset('low');
 assert(getSettings().graphicsPreset === 'low', 'setGraphicsPreset low');
 setGraphicsPreset('high');
 assert(getSettings().graphicsPreset === 'high', 'setGraphicsPreset high');
+
+// Per-device quality: same label, different cost; Low actually disables the expensive path
+for (const device of ['desktop', 'phone', 'tablet']) {
+  assert(GRAPHICS_QUALITY[device], `quality table ${device}`);
+  const low = resolveGraphicsQuality('low', device);
+  const mid = resolveGraphicsQuality('medium', device);
+  const high = resolveGraphicsQuality('high', device);
+  const ultra = resolveGraphicsQuality('ultra', device);
+  assert(low.device === device && low.id === 'low', `${device} low tagged`);
+  assert(low.postEnabled === false, `${device} low skips composer`);
+  assert(low.bloomEnabled === false, `${device} low has no bloom`);
+  assert(low.shadowsEnabled === false, `${device} low has no shadows`);
+  assert(ultra.bloomEnabled === true, `${device} ultra keeps bloom`);
+  assert(ultra.postEnabled === true, `${device} ultra keeps post`);
+  assert(high.pixelRatioCap >= mid.pixelRatioCap, `${device} high DPR >= medium`);
+  assert(ultra.maxPointLights > low.maxPointLights, `${device} ultra more lights than low`);
+  const sig = (q) =>
+    [q.shadowsEnabled, q.shadowMapSize, q.postEnabled, q.bloomEnabled, q.bloomResolutionScale, q.pixelRatioCap, q.maxPointLights].join('|');
+  assert(sig(low) !== sig(mid), `${device} low !== medium`);
+  assert(sig(mid) !== sig(high), `${device} medium !== high`);
+  assert(sig(high) !== sig(ultra), `${device} high !== ultra`);
+}
+assert(
+  resolveGraphicsQuality('high', 'phone').shadowMapSize < resolveGraphicsQuality('high', 'desktop').shadowMapSize,
+  'phone High is cheaper than desktop High'
+);
+assert(
+  resolveGraphicsQuality('high', 'tablet').shadowMapSize < resolveGraphicsQuality('high', 'desktop').shadowMapSize,
+  'tablet High is cheaper than desktop High'
+);
+assert(resolveGraphicsQuality('high', 'desktop').shadowMapSize >= 4096, 'desktop High keeps 4096 shadows');
+assert(GRAPHICS_PRESETS.high.shadowMapSize >= 4096, 'GRAPHICS_PRESETS.high stays desktop High');
+
+let appliedQuality = null;
+applyToGame({
+  applyGraphicsQuality(p) {
+    appliedQuality = p;
+  },
+});
+assert(appliedQuality && appliedQuality.id, 'applyToGame delegates to applyGraphicsQuality');
+assert(typeof appliedQuality.postEnabled === 'boolean', 'applied quality has postEnabled');
 
 patchSettings({ mouseSens: 1, adsSens: 1, invertY: false });
 const hip = lookScale({ aiming: false, scoped: false });

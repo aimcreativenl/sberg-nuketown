@@ -783,12 +783,21 @@ export class WeaponController {
     }
     if (switchedSlot) {
       triggerPulled = false;
+      // Only the pre-switch hold is stale. A later tap must be allowed to fire.
       this._ignoreHeldTrigger = true;
       if (shootClick) input.onSemiFire?.();
-    }
-    if (this._ignoreHeldTrigger) {
-      if (!wantShoot && !shootClick) this._ignoreHeldTrigger = false;
-      else triggerPulled = false;
+    } else if (this._ignoreHeldTrigger) {
+      if (wantShoot) {
+        triggerPulled = false;
+        // Drain leftover clicks so Game's shootClicks queue cannot pin this latch.
+        if (shootClick) input.onSemiFire?.();
+      } else {
+        this._ignoreHeldTrigger = false;
+        if (shootClick) {
+          triggerPulled = false;
+          input.onSemiFire?.();
+        }
+      }
     }
     const canFire =
       !this.reloading &&

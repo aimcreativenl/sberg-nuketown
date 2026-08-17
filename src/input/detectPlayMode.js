@@ -61,6 +61,38 @@ export function shouldShowRotateHint({
   return !!(touchPlay && portrait && running && !paused && !matchOver && !settingsOpen);
 }
 
+/**
+ * Coarse device class for graphics scaling.
+ * Desktop stays mouse/keyboard. Touch splits phone vs tablet (Android tablets
+ * usually omit "Mobile"; iPad is always tablet; short CSS side >= 600 is tablet).
+ * @returns {'desktop'|'phone'|'tablet'}
+ */
+export function getPlayDevice(env = {}) {
+  if (!isTouchPlay(env)) return 'desktop';
+
+  const nav =
+    env.navigator ||
+    (typeof navigator !== 'undefined' ? navigator : null) ||
+    {};
+  const ua = String(env.userAgent ?? nav.userAgent ?? '');
+  const platform = String(env.platform ?? nav.platform ?? '');
+  const maxTouchPoints = Number(env.maxTouchPoints ?? nav.maxTouchPoints ?? 0);
+  const uaDataMobile = env.userAgentData?.mobile ?? nav.userAgentData?.mobile;
+
+  if (/iPad/i.test(ua) || (platform === 'MacIntel' && maxTouchPoints > 1)) return 'tablet';
+  if (/Android/i.test(ua) && !/Mobile/i.test(ua)) return 'tablet';
+  if (/iPhone|iPod/i.test(ua)) return 'phone';
+  if (/Android/i.test(ua) && /Mobile/i.test(ua)) return 'phone';
+  if (uaDataMobile === true) return 'phone';
+
+  const win = env.window || (typeof window !== 'undefined' ? window : null);
+  const w = Number(env.innerWidth ?? win?.innerWidth ?? env.screenWidth ?? win?.screen?.width ?? 0);
+  const h = Number(env.innerHeight ?? win?.innerHeight ?? env.screenHeight ?? win?.screen?.height ?? 0);
+  const short = Math.min(w || h, h || w);
+  if (short >= 600) return 'tablet';
+  return 'phone';
+}
+
 /** Portrait on a touch device — FPS wants landscape. */
 export function isTouchPortrait(env = {}) {
   if (!isTouchPlay(env)) return false;

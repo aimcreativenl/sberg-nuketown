@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isTouchPlay, isTouchPortrait, shouldShowRotateHint } from '../src/input/detectPlayMode.js';
+import { isTouchPlay, isTouchPortrait, shouldShowRotateHint, getPlayDevice } from '../src/input/detectPlayMode.js';
 import { joystickToKeys, lookIdAfterFireDown, isLookTap } from '../src/input/TouchControls.js';
 import { gyroLookActive, motionToLookRates, screenOrientationAngle } from '../src/input/GyroLook.js';
 
@@ -58,6 +58,54 @@ assert(
   'coarse-only pointer is touch play'
 );
 assert(isTouchPlay({ userAgentData: { mobile: true }, userAgent: 'Mozilla/5.0' }) === true, 'UA-CH mobile is touch play');
+
+assert(
+  getPlayDevice({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+    pointerFine: true,
+    pointerCoarse: false,
+  }) === 'desktop',
+  'desktop Chrome is desktop graphics class'
+);
+assert(
+  getPlayDevice({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' }) === 'phone',
+  'iPhone is phone graphics class'
+);
+assert(
+  getPlayDevice({ userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0.0.0 Mobile' }) === 'phone',
+  'Android Mobile is phone graphics class'
+);
+assert(
+  getPlayDevice({ userAgent: 'Mozilla/5.0 (Linux; Android 15; OPPO Pad SE) Chrome/120.0.0.0 Safari/537.36' }) ===
+    'tablet',
+  'Android tablet (no Mobile) is tablet graphics class'
+);
+assert(
+  getPlayDevice({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)' }) === 'tablet',
+  'iPad is tablet graphics class'
+);
+assert(
+  getPlayDevice({
+    userAgent: 'Mozilla/5.0',
+    pointerFine: false,
+    pointerCoarse: true,
+    innerWidth: 400,
+    innerHeight: 800,
+    window: { innerWidth: 400, innerHeight: 800 },
+  }) === 'phone',
+  'small coarse screen is phone'
+);
+assert(
+  getPlayDevice({
+    userAgent: 'Mozilla/5.0',
+    pointerFine: false,
+    pointerCoarse: true,
+    innerWidth: 1280,
+    innerHeight: 800,
+    window: { innerWidth: 1280, innerHeight: 800 },
+  }) === 'tablet',
+  'large coarse screen is tablet'
+);
 
 assert(isTouchPortrait({ userAgent: 'iPhone', window: { innerWidth: 800, innerHeight: 400 } }) === false, 'landscape phone is not portrait');
 assert(

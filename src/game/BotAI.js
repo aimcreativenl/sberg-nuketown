@@ -187,6 +187,7 @@ export class BotManager {
       reloadT: 0,
     };
     this.lastHunterCount = 3;
+    this.cpuTier = 2;
   }
 
   _setTarget(bot, src) {
@@ -553,6 +554,9 @@ export class BotManager {
     const hunterIds = this._selectHunters(playerPos, playerAlive);
     const donuts = this.cb.getDonuts?.() || [];
     this._frame = (this._frame || 0) + 1;
+    const cpuTier = this.cpuTier ?? 2;
+    const losInterval = cpuTier <= 0 ? 0.15 : cpuTier === 1 ? 0.1 : 0.065;
+    const skipAnimDist = cpuTier <= 0 ? 14 : cpuTier === 1 ? 20 : 28;
 
     for (const bot of this.bots) {
       if (bot.dead) {
@@ -593,7 +597,7 @@ export class BotManager {
         if (bot._losRefresh <= 0) {
           los = this._hasLOS(bot.position, playerPos);
           bot._losCached = los;
-          bot._losRefresh = 0.065 + (bot.id % 4) * 0.016;
+          bot._losRefresh = losInterval + (bot.id % 4) * 0.016;
         } else {
           los = !!bot._losCached;
         }
@@ -968,7 +972,7 @@ export class BotManager {
       anim.aiming = aiming;
       anim.reloading = bot.reloading;
       anim.reloadT = reloadT;
-      const skipAnim = distPlayer > 28 && ((bot.id + this._frame) & 1);
+      const skipAnim = distPlayer > skipAnimDist && ((bot.id + this._frame) & 1);
       if (!skipAnim) bot.character.updateAnimation(dt, anim);
 
       // Shoot after anim so pose is up; triggerFire then snaps aim for the flash frame
