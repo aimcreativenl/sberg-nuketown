@@ -511,7 +511,7 @@ export class MpMatch {
       // Lag-comp / fallback: head at eye + chest sphere at rewound pose
       const head = eye.clone();
       const chest = eye.clone();
-      chest.y -= 0.45;
+      chest.y -= (other.height || PLAYER_HEIGHT) * 0.22;
       const picked = pickVolumeHit(
         origin,
         dir,

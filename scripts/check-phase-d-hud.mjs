@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GameUI } from '../src/game/UI.js';
 import { KILL_LIMIT } from '../src/game/constants.js';
+import { hitIndicatorAngle, incomingFromYaw, mergeHitDir } from '../src/game/HitFeedback.js';
 
 const failures = [];
 function assert(cond, msg) {
@@ -41,6 +42,24 @@ assert(html.includes('Aim sensitivity'), 'ADS/scope sensitivity control');
 assert(html.includes('Invert up'), 'invert Y control');
 assert(html.includes('death-title'), 'death-title element');
 assert(html.includes('HEADSHOT!'), 'HEADSHOT callout in HUD');
+assert(html.includes('id="hit-vignette"'), 'hit blood vignette in HUD');
+assert(html.includes('id="hit-drips"'), 'hit blood drips in HUD');
+assert(html.includes('id="hit-dirs"'), 'hit direction compass in HUD');
+assert(html.includes('id="blood-toggle"'), 'Blood setting toggle');
+assert(uiSrc.includes('showIncomingHit'), 'showIncomingHit');
+assert(uiSrc.includes('updateHitFeedback'), 'updateHitFeedback');
+assert(gameSrc.includes('showIncomingHit') || gameSrc.includes('_notifyPlayerHit'), 'Game notifies incoming hits');
+assert(gameSrc.includes('updateHitFeedback'), 'Game ticks hit compass');
+
+// Compass: yaw 0 looks −Z; +X is screen-right (+90°); turning to face the shot zeros the arrow.
+assert(Math.abs(hitIndicatorAngle(0, 0, 0, 0, -10)) < 1e-9, 'shot from front is 0');
+assert(Math.abs(hitIndicatorAngle(0, 0, 0, 10, 0) - Math.PI / 2) < 1e-9, 'shot from +X is +90°');
+assert(Math.abs(hitIndicatorAngle(0, 0, 0, -10, 0) + Math.PI / 2) < 1e-9, 'shot from −X is −90°');
+assert(Math.abs(hitIndicatorAngle(-Math.PI / 2, 0, 0, 10, 0)) < 1e-9, 'turning toward the shot keeps the arrow in front');
+assert(incomingFromYaw(0, 0, 0, 0) == null, 'on-top source has no direction');
+const merged = mergeHitDir(mergeHitDir([], -1.2), -1.1);
+assert(merged.length === 1, 'nearby world hits share one chevron');
+assert(mergeHitDir([{ fromYaw: 0, life: 1, peak: 0.8 }], Math.PI).length === 2, 'opposite hits stay two chevrons');
 assert(html.includes('SBARG') || html.includes('NUKETOWN'), 'title branding');
 assert(!html.includes('sberg-nuketown-keyart.png'), 'start screen does not embed key art image');
 assert(html.includes("S'BERG"), 'start screen wordmark');
@@ -63,6 +82,27 @@ ui.showMatchCallout('2');
 assert(ui.lastMatchCallout === '2', 'callout state');
 ui.showKillConfirm?.('ELIMINATED!');
 assert(ui.lastKillConfirmAt >= 0, 'kill confirm still works');
+ui.showIncomingHit({
+  fromX: 8,
+  fromZ: 0,
+  playerX: 0,
+  playerZ: 0,
+  playerYaw: 0,
+  damage: 18,
+  health: 82,
+  maxHealth: 100,
+});
+assert(ui._hitVignette > 0.3, `vignette pulses on hit (got ${ui._hitVignette})`);
+assert(ui._hitDirs.length === 1, 'stores a directional chevron');
+assert(ui.lastIncomingHitAt > 0, 'records incoming hit time');
+const yawAtHit = ui._hitDirs[0].fromYaw;
+ui.updateHitFeedback(-Math.PI / 2, 0.05, 0.82);
+assert(ui._hitDirs.length === 1, 'chevron persists while turning');
+assert(ui._hitDirs[0].fromYaw === yawAtHit, 'world yaw stays put so the arrow tracks look');
+ui.setBloodEnabled(false);
+assert(ui._bloodEnabled === false, 'blood can be disabled');
+ui.clearHitFeedback();
+assert(ui._hitDirs.length === 0 && ui._hitVignette === 0, 'clearHitFeedback resets');
 
 const report = { ok: failures.length === 0, failures };
 console.log(JSON.stringify(report, null, 2));

@@ -21,6 +21,7 @@ export function emptyInputFrame(overrides = {}) {
     interact: false,
     weaponSlot: 0,
     aimHold: false,
+    crouch: false,
     ...overrides,
   };
 }
@@ -90,5 +91,6 @@ export function sampleInputFrame(player, meta) {
     interact,
     weaponSlot,
     aimHold,
+    crouch: !!player?.crouching,
   });
 }

@@ -4,11 +4,11 @@
 
 | | |
 |--|--|
-| **Laatst bijgewerkt** | 2026-08-16 |
-| **Current checkpoint** | `main` live — touch Settings + Imagine-siroop / band / bot-difficulty |
+| **Laatst bijgewerkt** | 2026-08-17 |
+| **Current checkpoint** | `main` live — C-toggle bukken, Foundry silo's/drop-buis, hit-feedback |
 | **Local game** | http://127.0.0.1:5175/ |
 | **Progress dashboard** | http://127.0.0.1:8766/ |
-| **HEAD (typisch)** | `0263701` (`feat: Imagine syrup, belt ride, no auto-fire, bot names and difficulty`) |
+| **HEAD (typisch)** | latest `main` (C crouch toggle + Foundry dressing + hit feedback) |
 | **Branch** | `main` |
 | **Repo** | https://github.com/aimcreativenl/sberg-nuketown |
 | **Game (live)** | https://sberg-nuketown.vercel.app/ |
@@ -55,9 +55,19 @@ Pastel voxel FPS (Nuketown-achtig): **offline PLAY vs 9 bots**, of **online list
 
 ---
 
-## 3. Sessie-log — wat recent is gedaan (2026-08-16; historical entries retained)
+## 3. Sessie-log — wat recent is gedaan (2026-08-17; historical entries retained)
 
 Gebruik dit als “wat al gefixt is, niet opnieuw onderzoeken”.
+
+### 3.00e Crouch-toggle, Foundry dressing, hit-feedback (2026-08-17) — **live**
+
+**What:**
+1. **C is tap-toggle** — 1× bukken, 1× opstaan. Loslaten bevriest niet meer (`playerPositionBlocked` import + `setHalfHeight` i.p.v. `removeCollider`).
+2. **Foundry zuid-apron** — drie snoepsilo's + catwalk, drop-buis (alleen gebukt), jawbreakers, suikerstok-bogen, marshmallows.
+3. **Hit-feedback** — bloedrand + drips + richting-chevrons; Settings **Blood** (uit = alleen rand).
+4. **Huizen** — L1 zonder sprong door de deur, L2-plafond stopt jump, kogelwerende muren/meubels, hip-recoil sterker dan ADS. Meubels zijn geen plafond meer (geen floor-fling).
+
+**Tests:** `test:crouch` `test:candy-foundry` `test:mp-sync` `build` groen.
 
 ### 3.00d Touch Settings bereikbaar (2026-08-16)
 

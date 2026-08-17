@@ -6,7 +6,7 @@ import { SWEET_CO, SUGAR_WORKS, buildingAabb } from './layout.js';
 import { rbox, box, addAabb, addFloor, addSwingDoor, trackLight } from './helpers.js';
 
 const WALL_INFLATE = 0.45;
-const L1_WALK = 0.25;
+const L1_WALK = 0;
 const STEP_COUNT = 14;
 const STAIR_RUN = 0.55;
 const DOOR_W = 1.92;
@@ -258,7 +258,7 @@ function addL1Floor(ctx, house, spec) {
   const aabb = buildingAabb(spec);
   const inset = spec.wallT * 0.55;
   house.add(
-    box(spec.w - spec.wallT, 0.2, spec.d - spec.wallT, 0xf2dcc8, 0, 0.1, 0, { kind: 'wood' })
+    box(spec.w - spec.wallT, 0.08, spec.d - spec.wallT, 0xf2dcc8, 0, 0.04, 0, { kind: 'wood' })
   );
   addFloor(
     ctx.floors,
@@ -834,8 +834,11 @@ function addSolidWall(ctx, house, spec, lx, y, lz, w, h, d, part, color) {
   const mesh = rbox(w, h, d, color, lx, y, lz);
   mesh.name = `${spec.id}_${part}`;
   house.add(mesh);
-  const cw = w <= d + 1e-6 ? w + WALL_INFLATE : w;
-  const cd = d < w - 1e-6 ? d + WALL_INFLATE : d;
+  // Inflate thickness only — never the wall run, or short jambs eat the door hole.
+  let cw = w;
+  let cd = d;
+  if (w + 1e-6 < d) cw = w + WALL_INFLATE;
+  else if (d + 1e-6 < w) cd = d + WALL_INFLATE;
   addAabb(ctx.colliders, spec.cx + lx, y, spec.cz + lz, cw, h, cd, {
     kind: 'house_wall',
     house: spec.id,

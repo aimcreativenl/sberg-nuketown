@@ -1,5 +1,6 @@
 import { GUN_ICONS, KILL_LIMIT } from './constants.js';
 import { hasRemoteSignalHub } from '../net/rtcConfig.js';
+import { HIT_DIR_LIFE, incomingFromYaw, mergeHitDir, wrapPi } from './HitFeedback.js';
 
 export class GameUI {
   constructor() {
@@ -44,6 +45,10 @@ export class GameUI {
       matchCallout: el('match-callout'),
       join: el('join-screen'),
       lobby: el('lobby-screen'),
+      hitVignette: el('hit-vignette'),
+      hitDrips: el('hit-drips'),
+      hitDirs: el('hit-dirs'),
+      hitFeedback: el('hit-feedback'),
     };
     this._hitTimer = 0;
     this._headshotTimer = 0;
@@ -64,6 +69,10 @@ export class GameUI {
     /** @type {number} */
     this.lastFightCalloutAt = 0;
     this._calloutKey = null;
+    this._hitVignette = 0;
+    this._hitDirs = [];
+    this._hitHpPct = 1;
+    this._bloodEnabled = true;
   }
 
   showStart() {
@@ -76,6 +85,7 @@ export class GameUI {
     this.hideJoin();
     this.hideLobby();
     this.hideMatchCallout();
+    this.clearHitFeedback();
     // Reset how-to panel each visit
     document.getElementById('start-how')?.classList.add('hidden');
     document.getElementById('btn-how')?.setAttribute('aria-expanded', 'false');
@@ -499,7 +509,128 @@ export class GameUI {
     }, 1400);
   }
 
+  /**
+   * Blood rim + compass chevron when the local player is shot.
+   * @param {{
+   *   fromX?: number, fromZ?: number,
+   *   playerX?: number, playerZ?: number, playerYaw?: number,
+   *   damage?: number, health?: number, maxHealth?: number,
+   *   omnidirectional?: boolean,
+   * }} info
+   */
+  showIncomingHit(info = {}) {
+    const dmg = Number(info.damage) || 0;
+    const hp = Number(info.health);
+    const maxHp = Number(info.maxHealth) || 100;
+    if (Number.isFinite(hp)) this._hitHpPct = Math.max(0, Math.min(1, hp / maxHp));
+    const pulse = 0.58 + Math.min(0.38, dmg / 45);
+    this._hitVignette = Math.min(1, (this._hitVignette || 0) + pulse);
+    this.lastIncomingHitAt =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this._spawnHitDrips(dmg);
+
+    if (info.omnidirectional) {
+      this._paintHitFeedback(info.playerYaw || 0);
+      return;
+    }
+    if (
+      !Number.isFinite(info.fromX) ||
+      !Number.isFinite(info.fromZ) ||
+      !Number.isFinite(info.playerX) ||
+      !Number.isFinite(info.playerZ)
+    ) {
+      this._paintHitFeedback(info.playerYaw || 0);
+      return;
+    }
+    const fromYaw = incomingFromYaw(info.playerX, info.playerZ, info.fromX, info.fromZ);
+    if (fromYaw != null) {
+      this._hitDirs = mergeHitDir(this._hitDirs, fromYaw, HIT_DIR_LIFE);
+    }
+    this._paintHitFeedback(info.playerYaw || 0);
+  }
+
+  updateHitFeedback(playerYaw, dt, hpPct) {
+    if (Number.isFinite(hpPct)) this._hitHpPct = Math.max(0, Math.min(1, hpPct));
+    const floor = this._hitHpPct < 0.32 ? 0.28 : this._hitHpPct < 0.5 ? 0.12 : 0;
+    this._hitVignette = Math.max(floor, (this._hitVignette || 0) - Math.max(0, dt) * 0.82);
+    if (this._hitDirs?.length) {
+      for (const d of this._hitDirs) d.life -= dt;
+      this._hitDirs = this._hitDirs.filter((d) => d.life > 0);
+    }
+    this._paintHitFeedback(playerYaw || 0);
+  }
+
+  clearHitFeedback() {
+    this._hitVignette = 0;
+    this._hitDirs = [];
+    this._hitHpPct = 1;
+    this._clearHitDrips();
+    this._paintHitFeedback(0);
+  }
+
+  setBloodEnabled(on) {
+    this._bloodEnabled = !!on;
+    this.els.hitFeedback?.classList.toggle('no-blood', !this._bloodEnabled);
+    if (!this._bloodEnabled) this._clearHitDrips();
+  }
+
+  _clearHitDrips() {
+    const root = this.els.hitDrips;
+    if (root) root.replaceChildren();
+  }
+
+  _spawnHitDrips(damage = 16) {
+    const root = this.els.hitDrips;
+    if (!root || typeof document === 'undefined' || this._bloodEnabled === false) return;
+    const n = 4 + Math.min(6, Math.round((Number(damage) || 16) / 12));
+    for (let i = 0; i < n; i++) {
+      const el = document.createElement('span');
+      const bead = i % 4 === 0;
+      el.className = bead ? 'hit-drip is-bead' : 'hit-drip';
+      el.style.left = `${4 + Math.random() * 92}%`;
+      el.style.setProperty('--drip-w', `${bead ? 5 + Math.random() * 5 : 5 + Math.random() * 8}px`);
+      el.style.setProperty('--drip-h', `${36 + Math.random() * 88}px`);
+      el.style.setProperty('--drip-dur', `${0.85 + Math.random() * 0.75}s`);
+      el.style.setProperty('--drip-delay', `${Math.random() * 0.16}s`);
+      el.style.setProperty('--drip-sway', `${(Math.random() - 0.5) * 28}px`);
+      el.addEventListener('animationend', () => el.remove());
+      root.appendChild(el);
+    }
+    while (root.children.length > 28) root.firstChild.remove();
+  }
+
+  _paintHitFeedback(playerYaw) {
+    const vig = this.els.hitVignette;
+    if (vig) {
+      const a = this._hitVignette || 0;
+      vig.style.opacity = a > 0.02 ? a.toFixed(3) : '0';
+      vig.classList.toggle('is-low', this._hitHpPct < 0.32 && a > 0.05);
+    }
+    const root = this.els.hitDirs;
+    if (!root || typeof document === 'undefined') return;
+    const dirs = this._hitDirs || [];
+    while (root.children.length < dirs.length) {
+      const el = document.createElement('div');
+      el.className = 'hit-dir';
+      el.innerHTML =
+        '<div class="hit-dir-inner"><span class="hit-chevron hit-chevron-far"></span><span class="hit-chevron"></span></div>';
+      root.appendChild(el);
+    }
+    while (root.children.length > dirs.length) root.lastChild.remove();
+    for (let i = 0; i < dirs.length; i++) {
+      const d = dirs[i];
+      const el = root.children[i];
+      const fade = Math.max(0, Math.min(1, d.life / 0.45));
+      const age = HIT_DIR_LIFE - d.life;
+      const scale = 0.9 + 0.14 * Math.min(1, age / 0.08);
+      const deg = (wrapPi((playerYaw || 0) - (d.fromYaw || 0)) * 180) / Math.PI;
+      el.style.opacity = String((d.peak || 0.85) * fade);
+      el.style.transform = `translate(-50%, -50%) rotate(${deg.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+    }
+  }
+
   showDeath(killerName, seconds, opts = {}) {
+    this.clearHitFeedback();
     this.els.death.classList.remove('hidden');
     if (this.els.deathTitle) {
       this.els.deathTitle.textContent = opts.eliminated ? 'ELIMINATED' : 'DOWN!';

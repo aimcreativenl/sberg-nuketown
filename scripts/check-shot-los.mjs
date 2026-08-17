@@ -73,6 +73,29 @@ assert(
   'short-range through front wall blocks'
 );
 
+const stair = C.find((c) => c.kind === 'stair_tread');
+assert(stair, 'nuketown stair tread collider');
+assert(
+  rayBlockedBySolids(
+    new THREE.Vector3((stair.box.min.x + stair.box.max.x) / 2, stair.box.min.y - 0.4, (stair.box.min.z + stair.box.max.z) / 2),
+    new THREE.Vector3((stair.box.min.x + stair.box.max.x) / 2, stair.box.max.y + 0.6, (stair.box.min.z + stair.box.max.z) / 2),
+    C,
+    opts
+  ),
+  'stair treads block shots'
+);
+const furniture = C.find((c) => c.kind === 'house_furniture' || c.kind === 'cover');
+if (furniture) {
+  const fx = (furniture.box.min.x + furniture.box.max.x) / 2;
+  const fy = (furniture.box.min.y + furniture.box.max.y) / 2;
+  const fz = (furniture.box.min.z + furniture.box.max.z) / 2;
+  const hx = (furniture.box.max.x - furniture.box.min.x) / 2 + 1.2;
+  assert(
+    rayBlockedBySolids(new THREE.Vector3(fx - hx, fy, fz), new THREE.Vector3(fx + hx, fy, fz), C, opts),
+    'interior furniture / cover blocks shots'
+  );
+}
+
 const report = { ok: failures.length === 0, floorSlabs: floors.length, failures };
 console.log(JSON.stringify(report, null, 2));
 if (failures.length) {

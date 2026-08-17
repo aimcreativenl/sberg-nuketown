@@ -107,7 +107,7 @@
           </nav>
           <div id="start-how" class="start-how hidden" role="region" aria-label="Controls">
             <div class="how-desktop">
-              <p><kbd>WASD</kbd> Move · <kbd>Space</kbd> Jump · <kbd>Shift</kbd> Sprint</p>
+              <p><kbd>WASD</kbd> Move · <kbd>Space</kbd> Jump · <kbd>Shift</kbd> Sprint · <kbd>C</kbd> Crouch</p>
               <p><kbd>LMB</kbd> Shoot · <kbd>RMB hold</kbd> ADS · <kbd>RMB tap</kbd> Scope · <kbd>Scroll</kbd> Zoom</p>
               <p><kbd>R</kbd> Reload · <kbd>E</kbd> Door / Medkit · <kbd>1</kbd>/<kbd>2</kbd> Weapons</p>
               <p><kbd>Esc</kbd> Pause · <kbd>Tab</kbd> Scoreboard</p>
@@ -220,6 +220,12 @@
             <span class="ammo-sep">/</span>
             <span id="ammo-mag">12</span>
           </div>
+        </div>
+
+        <div id="hit-feedback" aria-hidden="true">
+          <div id="hit-vignette"></div>
+          <div id="hit-drips"></div>
+          <div id="hit-dirs"></div>
         </div>
 
         <div id="crosshair">
@@ -346,6 +352,13 @@
           <label class="settings-field settings-check">
             <input id="mute-toggle" type="checkbox" />
             <span class="settings-label">Mute</span>
+          </label>
+          <label class="settings-field settings-check">
+            <input id="blood-toggle" type="checkbox" checked />
+            <span>
+              <span class="settings-label">Blood</span>
+              <span class="settings-hint">Drips when you get hit. Off keeps only the red edge</span>
+            </span>
           </label>
           <label class="settings-field">
             <span class="settings-label">Graphics</span>

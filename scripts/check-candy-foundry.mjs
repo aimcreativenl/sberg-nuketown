@@ -18,6 +18,10 @@ import {
   GUMMY_BEARS,
   SOFT_SERVE,
   GIFT_GANTRY,
+  CANDY_SILOS,
+  LICORICE_PIPE,
+  JAWBREAKERS,
+  CANDY_CANE_ARCHES,
 } from '../src/maps/candy-foundry/layout.js';
 import {
   DEFAULT_MAP_ID,
@@ -29,8 +33,8 @@ import {
 } from '../src/maps/index.js';
 import { brZoneFromMap, zoneRadiusAt } from '../src/modes/pubg.js';
 import { DoorManager } from '../src/game/Doors.js';
-import { playerPositionBlocked } from '../src/game/collision.js';
-import { PLAYER_HEIGHT, PLAYER_RADIUS } from '../src/game/constants.js';
+import { playerPositionBlocked, rayBlockedBySolids } from '../src/game/collision.js';
+import { PLAYER_HEIGHT, PLAYER_CROUCH_HEIGHT, PLAYER_RADIUS } from '../src/game/constants.js';
 import { existsSync } from 'node:fs';
 import { SYRUP_BITMAPS } from '../src/maps/candy-foundry/syrupFlow.js';
 
@@ -164,6 +168,12 @@ assert(names.includes(CUPCAKE_KIOSK.id), 'cupcake_kiosk group');
 assert(names.includes('gummy_bears'), 'gummy_bears group');
 assert(names.includes(SOFT_SERVE.id), 'soft_serve_tower group');
 assert(names.includes(GIFT_GANTRY.id), 'gift_gantry group');
+assert(names.includes('candy_silos'), 'candy_silos group');
+assert(names.includes(LICORICE_PIPE.id), 'licorice_pipe group');
+assert(names.includes('candy_landmarks'), 'candy_landmarks group');
+assert(CANDY_SILOS.length >= 3, 'three candy silos authored');
+assert(JAWBREAKERS.length >= 4, 'jawbreaker cover authored');
+assert(CANDY_CANE_ARCHES.length >= 3, 'candy-cane arches authored');
 assert(GUMMY_BEARS.length >= 3, 'three gummy bears authored');
 assert((data.belts || []).length >= 2, `belts include ground line + gantry (got ${data.belts?.length})`);
 {
@@ -182,6 +192,95 @@ assert((data.belts || []).length >= 2, `belts include ground line + gantry (got 
 const eye = { height: PLAYER_HEIGHT, radius: PLAYER_RADIUS };
 const blocked = (x, z) =>
   playerPositionBlocked({ x, y: PLAYER_HEIGHT, z }, data.colliders, eye);
+
+const shotOpts = { minHeight: 0.5, tMin: 0.08, tEndPad: 0.08 };
+{
+  const silo = CANDY_SILOS[1];
+  assert(blocked(silo.x, silo.z), `silo ${silo.id} body blocks standing`);
+  assert(
+    rayBlockedBySolids(
+      new THREE.Vector3(silo.x - silo.r - 2.4, 2.2, silo.z),
+      new THREE.Vector3(silo.x, 2.2, silo.z),
+      data.colliders,
+      shotOpts
+    ),
+    `silo ${silo.id} blocks shots`
+  );
+}
+{
+  const midX = (LICORICE_PIPE.x0 + LICORICE_PIPE.x1) / 2;
+  const z = LICORICE_PIPE.z;
+  const crouchEye = { height: PLAYER_CROUCH_HEIGHT, radius: PLAYER_RADIUS };
+  assert(
+    !playerPositionBlocked({ x: midX, y: PLAYER_CROUCH_HEIGHT, z }, data.colliders, crouchEye),
+    'crouched body fits in licorice pipe'
+  );
+  assert(
+    playerPositionBlocked({ x: midX, y: PLAYER_HEIGHT, z }, data.colliders, eye),
+    'standing body does not fit in licorice pipe'
+  );
+  assert(
+    !rayBlockedBySolids(
+      new THREE.Vector3(LICORICE_PIPE.x0 - 2, 0.55, z),
+      new THREE.Vector3(LICORICE_PIPE.x1 + 2, 0.55, z),
+      data.colliders,
+      { minHeight: 0.22, tMin: 0.08, tEndPad: 0.08 }
+    ),
+    'pipe tunnel is open along its axis'
+  );
+  assert(
+    rayBlockedBySolids(
+      new THREE.Vector3(midX, 0.7, z - 3),
+      new THREE.Vector3(midX, 0.7, z + 3),
+      data.colliders,
+      shotOpts
+    ),
+    'pipe side walls block shots'
+  );
+}
+{
+  const arch = CANDY_CANE_ARCHES[1];
+  assert(
+    !playerPositionBlocked({ x: arch.x, y: PLAYER_HEIGHT, z: arch.z }, data.colliders, eye),
+    'candy-cane arch walk-through is standing-clear'
+  );
+}
+assert(
+  rayBlockedBySolids(
+    new THREE.Vector3(SWEET_CO.cx, 1.5, SWEET_CO.cz - SWEET_CO.d / 2 - 2.4),
+    new THREE.Vector3(SWEET_CO.cx, 1.5, SWEET_CO.cz - 1),
+    data.colliders,
+    shotOpts
+  ),
+  'Sweet Co back wall blocks shots'
+);
+assert(
+  rayBlockedBySolids(
+    new THREE.Vector3(SWEET_CO.cx + 5, 1.3, SWEET_CO.cz),
+    new THREE.Vector3(SWEET_CO.cx + 5, 4.2, SWEET_CO.cz),
+    data.colliders,
+    shotOpts
+  ),
+  'Sweet Co L2 floor blocks vertical shots'
+);
+assert(
+  rayBlockedBySolids(
+    new THREE.Vector3(TASTING_KIOSK.cx, 1.4, TASTING_KIOSK.cz + TASTING_KIOSK.d / 2 + 2),
+    new THREE.Vector3(TASTING_KIOSK.cx, 1.4, TASTING_KIOSK.cz),
+    data.colliders,
+    shotOpts
+  ),
+  'closed tasting-kiosk door / front blocks shots'
+);
+assert(
+  rayBlockedBySolids(
+    new THREE.Vector3(TASTING_KIOSK.cx, 0.55, TASTING_KIOSK.cz + 1.4),
+    new THREE.Vector3(TASTING_KIOSK.cx, 0.55, TASTING_KIOSK.cz - 3.2),
+    data.colliders,
+    shotOpts
+  ),
+  'kiosk counter blocks shots'
+);
 
 assert(blocked(SWEET_CO.cx, SWEET_CO.cz - SWEET_CO.d / 2), 'Sweet Co back wall blocks');
 assert(blocked(SUGAR_WORKS.cx, SUGAR_WORKS.cz + SUGAR_WORKS.d / 2), 'Sugar Works back wall blocks');
@@ -445,6 +544,19 @@ const rapierWalk = { sweetL2: 0, sugarL2: 0, pretzel: 0, gumY: 0, canalMul: 1, d
   rapierWalk.sugarL2 = sugarL2.maxY;
   assert(sugarL2.maxY >= 3.1, `Sugar Works L2 stairs (maxFeet=${sugarL2.maxY.toFixed(2)})`);
 
+  // Kiosks: walk in on the flat hangar floor — no jump over a raised L1 pad.
+  warp(50, PLAYER_HEIGHT, -42.15, 0);
+  mgr.setOpen('door_front_tasting_kiosk', true);
+  const inKiosk = drive(0, 140);
+  assert(inKiosk.z < -44.6, `walk into tasting kiosk without jump (z=${inKiosk.z.toFixed(2)})`);
+  assert(inKiosk.feet < 0.12, `tasting kiosk L1 is ground-level (feet=${inKiosk.feet.toFixed(2)})`);
+
+  warp(-36, PLAYER_HEIGHT, 39.25, 0);
+  mgr.setOpen('door_front_cupcake_kiosk', true);
+  const inCup = drive(0, 140);
+  assert(inCup.z < 36.4, `walk into cupcake kiosk without jump (z=${inCup.z.toFixed(2)})`);
+  assert(inCup.feet < 0.12, `cupcake kiosk L1 is ground-level (feet=${inCup.feet.toFixed(2)})`);
+
   // Gumdrop (−28, −4): walk across, stay on raised floor.
   warp(-32.2, PLAYER_HEIGHT + 0.55, -4, -Math.PI / 2);
   const gum = drive(-Math.PI / 2, 140);
@@ -477,6 +589,19 @@ const rapierWalk = { sweetL2: 0, sugarL2: 0, pretzel: 0, gumY: 0, canalMul: 1, d
   const pretzel = drive(Math.PI / 2, 320);
   rapierWalk.pretzel = pretzel.maxY;
   assert(pretzel.maxY >= 4.2, `pretzel island stairs (maxFeet=${pretzel.maxY.toFixed(2)})`);
+
+  // Crouch-walk the licorice pipe west → east.
+  const pipeZ = LICORICE_PIPE.z;
+  warp(LICORICE_PIPE.x0 - 2.4, PLAYER_HEIGHT, pipeZ, -Math.PI / 2);
+  player.keys.add('KeyC');
+  player.update(1 / 60, data.colliders, data.floors, []);
+  physics.step(1 / 60);
+  player.keys.delete('KeyC');
+  assert(player.crouching === true, 'C toggles crouch before pipe');
+  const pipeWalk = drive(-Math.PI / 2, 90);
+  assert(player.crouching === true, 'still crouched after pipe walk');
+  assert(pipeWalk.x > LICORICE_PIPE.x0 + 1.5, `crouch-walk into pipe (x=${pipeWalk.x.toFixed(2)})`);
+  rapierWalk.pipeX = pipeWalk.x;
 
   physics.dispose();
 }

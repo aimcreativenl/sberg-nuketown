@@ -24,6 +24,9 @@ import { buildCupcakeKiosk } from './cupcakeKiosk.js';
 import { buildGummyBears } from './gummyBears.js';
 import { buildSoftServe } from './softServe.js';
 import { buildGiftGantry } from './giftGantry.js';
+import { buildCandySilos } from './candySilos.js';
+import { buildLicoricePipe } from './licoricePipe.js';
+import { buildCandyLandmarks } from './candyLandmarks.js';
 import { disposeSyrupFlows, tickSyrupFlows } from './syrupFlow.js';
 
 export function buildCandyFoundry(scene) {
@@ -36,6 +39,9 @@ export function buildCandyFoundry(scene) {
   buildGummyBears(ctx);
   buildSoftServe(ctx);
   buildGiftGantry(ctx);
+  buildCandySilos(ctx);
+  buildLicoricePipe(ctx);
+  buildCandyLandmarks(ctx);
   buildYard(ctx);
 
   const safeSpawnPoints = (ctx.spawnPoints || []).filter((spawn) => {

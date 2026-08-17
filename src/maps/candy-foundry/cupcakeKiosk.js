@@ -10,7 +10,7 @@ const DOOR_TOP = 2.25;
 const WIN_W = 1.28;
 const WIN_H = 1.08;
 const SILL = 0.82;
-const L1_WALK = 0.25;
+const L1_WALK = 0;
 
 function wall(ctx, house, spec, lx, ly, lz, w, h, d, color, part) {
   house.add(rbox(w, h, d, color, lx, ly, lz, { name: `${spec.id}_${part}` }));
@@ -64,7 +64,7 @@ export function buildCupcakeKiosk(ctx) {
   const backZ = -hz;
   const aabb = buildingAabb(spec);
 
-  house.add(box(w - wallT, 0.2, d - wallT, 0xffe8c8, 0, 0.1, 0, { kind: 'wood', name: `${spec.id}_floor` }));
+  house.add(box(w - wallT, 0.08, d - wallT, 0xffe8c8, 0, 0.04, 0, { kind: 'wood', name: `${spec.id}_floor` }));
   addFloor(ctx.floors, aabb.minX + 0.28, aabb.maxX - 0.28, aabb.minZ + 0.28, aabb.maxZ - 0.28, L1_WALK);
 
   const doorGap = [[-DOOR_W / 2, DOOR_W / 2]];

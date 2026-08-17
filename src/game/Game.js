@@ -54,7 +54,7 @@ import {
   HEAD_HIT_RADIUS,
   VIEWMODEL_LAYER,
 } from './constants.js';
-import { pickVolumeHit } from './hitscan.js';
+import { pickVolumeHit, rayHitsSphere } from './hitscan.js';
 import { OnlineSession } from '../net/OnlineSession.js';
 import { MpMatch } from '../net/MpMatch.js';
 import { getModeById } from '../modes/registry.js';
@@ -978,6 +978,13 @@ export class Game {
         this.audio.playHurt?.();
         const punch = msg.headshot ? 0.014 : 0.008;
         this.hitPunch.pitch += punch;
+        const atk = this.mpMatch?.pawns?.get(msg.attackerId);
+        this._notifyPlayerHit({
+          fromX: atk?.position?.x,
+          fromZ: atk?.position?.z,
+          damage: msg.damage,
+          omnidirectional: msg.attackerId === 'zone' || !!msg.extra?.zone || !atk,
+        });
       }
       return;
     }
@@ -1361,6 +1368,7 @@ export class Game {
       const gyroSens = document.getElementById('sens-gyro');
       const vol = document.getElementById('volume-slider');
       const mute = document.getElementById('mute-toggle');
+      const blood = document.getElementById('blood-toggle');
       const gfx = document.getElementById('graphics-preset-select');
       if (mouse) mouse.value = pct(s.mouseSens);
       if (ads) ads.value = pct(s.adsSens);
@@ -1370,6 +1378,7 @@ export class Game {
       if (gyroSens) gyroSens.value = pct(s.gyroSens);
       if (vol) vol.value = pct(s.volume);
       if (mute) mute.checked = !!s.muted;
+      if (blood) blood.checked = s.blood !== false;
       if (gfx) gfx.value = s.graphicsPreset;
       const gfxHint = document.getElementById('graphics-preset-hint');
       if (gfxHint) {
@@ -1431,6 +1440,11 @@ export class Game {
     document.getElementById('mute-toggle')?.addEventListener('change', (e) => {
       this.audio.unlock();
       patchSettings({ muted: !!e.target.checked });
+      applyToGame(this);
+      fillFromStore();
+    });
+    document.getElementById('blood-toggle')?.addEventListener('change', (e) => {
+      patchSettings({ blood: !!e.target.checked });
       applyToGame(this);
       fillFromStore();
     });
@@ -1888,6 +1902,11 @@ export class Game {
     this.flags?.update(dt);
     this.zoneRing?.update(dt);
     this.ui.updateStats(this.player, this._hudMatch());
+    this.ui.updateHitFeedback?.(
+      this.player.yaw,
+      dt,
+      this.player.alive ? this.player.health / this.player.maxHealth : 0
+    );
     this.ui.setFlagCarry?.(this._localCarryingFlag());
 
     // Refresh Tab scoreboard while held
@@ -1897,6 +1916,20 @@ export class Game {
 
     // Check win conditions
     this._checkMatchEnd();
+  }
+
+  _notifyPlayerHit({ fromX, fromZ, damage, omnidirectional = false } = {}) {
+    this.ui.showIncomingHit?.({
+      fromX,
+      fromZ,
+      playerX: this.player.position.x,
+      playerZ: this.player.position.z,
+      playerYaw: this.player.yaw,
+      damage,
+      health: this.player.health,
+      maxHealth: this.player.maxHealth,
+      omnidirectional,
+    });
   }
 
   _localCarryingFlag() {
@@ -2026,16 +2059,7 @@ export class Game {
   }
 
   _rayHitsSphere(origin, dir, center, radius) {
-    const oc = origin.clone().sub(center);
-    const b = oc.dot(dir);
-    const c = oc.dot(oc) - radius * radius;
-    const disc = b * b - c;
-    if (disc < 0) return null;
-    const s = Math.sqrt(disc);
-    let t = -b - s;
-    if (t < 0) t = -b + s;
-    if (t < 0 || t > 200) return null;
-    return { dist: t, point: origin.clone().addScaledVector(dir, t) };
+    return rayHitsSphere(origin, dir, center, radius);
   }
 
   /**
@@ -2135,15 +2159,12 @@ export class Game {
 
     if (!this.player.alive) return;
 
-    // Hitscan vs player
-    const head = this.player.position.clone();
-    const chest = this.player.position.clone();
-    chest.y -= 0.35;
-
-    let hit = this._rayHitsSphere(shot.origin, shot.direction, head, 0.28);
+    // Hitscan vs player — spheres shrink when crouched
+    const vols = this.player.getHitSpheres();
+    let hit = this._rayHitsSphere(shot.origin, shot.direction, vols.head, vols.head.radius);
     let headshot = true;
     if (!hit) {
-      hit = this._rayHitsSphere(shot.origin, shot.direction, chest, 0.45);
+      hit = this._rayHitsSphere(shot.origin, shot.direction, vols.chest, vols.chest.radius);
       headshot = false;
     }
     if (!hit || hit.dist > shot.range) return;
@@ -2155,14 +2176,12 @@ export class Game {
     this.particles.bloodPuff(hit.point);
     this.audio.playHurt?.();
     this.ui.updateStats(this.player, this._hudMatch());
-    // Screen hurt flash
-    const app = document.getElementById('app');
-    if (app) {
-      app.classList.remove('hurt');
-      void app.offsetWidth;
-      app.classList.add('hurt');
-      setTimeout(() => app.classList.remove('hurt'), 280);
-    }
+    this._notifyPlayerHit({
+      fromX: shot.origin?.x,
+      fromZ: shot.origin?.z,
+      damage: dmg,
+    });
+    this.hitPunch.pitch += headshot ? 0.012 : 0.007;
 
     if (killed) {
       this.lastKiller = shot.bot.name;

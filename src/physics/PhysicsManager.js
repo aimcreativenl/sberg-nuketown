@@ -616,7 +616,41 @@ export class PhysicsManager {
       grounded: true,
       height,
       radius,
+      collisionGroups: groups,
     };
+  }
+
+  /**
+   * Resize the capsule at a new standing height, keeping feet planted.
+   * Prefer in-place setHalfHeight — removeCollider mid-controller freezes Rapier WASM.
+   */
+  setCharacterHeight(handle, newHeight) {
+    if (!handle || !this.world || !this.RAPIER) return;
+    if (!handle.body || !handle.collider) return;
+    const radius = handle.radius || PLAYER_RADIUS;
+    const h = Math.max(radius * 2 + 0.04, Number(newHeight) || PLAYER_HEIGHT);
+    if (Math.abs(h - handle.height) < 1e-3) return;
+    const t = handle.body.translation();
+    const feetY = t.y - handle.height / 2;
+    const capsuleHalfHeight = Math.max(0.02, (h - 2 * radius) / 2);
+    try {
+      if (typeof handle.collider.setHalfHeight === 'function') {
+        handle.collider.setHalfHeight(capsuleHalfHeight);
+      } else {
+        const groups = handle.collisionGroups;
+        this.world.removeCollider(handle.collider, true);
+        let desc = this.RAPIER.ColliderDesc.capsule(capsuleHalfHeight, radius).setFriction(0);
+        if (groups != null) desc = desc.setCollisionGroups(groups);
+        handle.collider = this.world.createCollider(desc, handle.body);
+      }
+    } catch (err) {
+      console.warn('[physics] setCharacterHeight failed', err);
+      return;
+    }
+    handle.height = h;
+    const pos = { x: t.x, y: feetY + h / 2, z: t.z };
+    handle.body.setTranslation(pos, true);
+    handle.body.setNextKinematicTranslation(pos);
   }
 
   /**

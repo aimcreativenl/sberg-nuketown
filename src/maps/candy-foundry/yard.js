@@ -17,6 +17,11 @@ import {
   GUMMY_BEARS,
   SOFT_SERVE,
   GIFT_GANTRY,
+  CANDY_SILOS,
+  LICORICE_PIPE,
+  JAWBREAKERS,
+  CANDY_CANE_ARCHES,
+  MARSHMALLOWS,
   buildingAabb,
 } from './layout.js';
 import { addAabb, addFloor, box, rbox, resolveMat } from './helpers.js';
@@ -67,6 +72,21 @@ function inBuilding(x, z, margin = 1.6) {
   }
   for (const b of GUMMY_BEARS) {
     if (Math.hypot(x - b.x, z - b.z) < 2.1 + margin) return true;
+  }
+  for (const s of CANDY_SILOS) {
+    if (Math.hypot(x - s.x, z - s.z) < s.r + 1.3 + margin) return true;
+  }
+  if (x >= LICORICE_PIPE.x0 - margin && x <= LICORICE_PIPE.x1 + margin) {
+    if (Math.abs(z - LICORICE_PIPE.z) < LICORICE_PIPE.innerW / 2 + 1.1 + margin) return true;
+  }
+  for (const j of JAWBREAKERS) {
+    if (Math.hypot(x - j.x, z - j.z) < j.r + 0.8 + margin) return true;
+  }
+  for (const a of CANDY_CANE_ARCHES) {
+    if (Math.hypot(x - a.x, z - a.z) < 2.2 + margin) return true;
+  }
+  for (const m of MARSHMALLOWS) {
+    if (Math.hypot(x - m.x, z - m.z) < 1.6 + margin) return true;
   }
   return false;
 }

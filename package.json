@@ -25,6 +25,7 @@
     "test:doors": "node scripts/check-doors.mjs",
     "test:shot-los": "node scripts/check-shot-los.mjs",
     "test:ceiling": "node scripts/check-ceiling.mjs",
+    "test:crouch": "node scripts/check-crouch.mjs",
     "test:physics-solids": "node scripts/check-physics-solids.mjs",
     "test:physics-climb": "node scripts/check-physics-climb.mjs",
     "test:physics-mantle": "node scripts/check-physics-mantle.mjs",

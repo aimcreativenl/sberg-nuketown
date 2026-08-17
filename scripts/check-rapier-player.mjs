@@ -8,7 +8,7 @@ import { buildMap, HOUSE_X } from '../src/game/MapBuilder.js';
 import { Player } from '../src/game/Player.js';
 import { DoorManager } from '../src/game/Doors.js';
 import { PhysicsManager } from '../src/physics/PhysicsManager.js';
-import { PLAYER_HEIGHT } from '../src/game/constants.js';
+import { PLAYER_HEIGHT, PLAYER_CROUCH_HEIGHT } from '../src/game/constants.js';
 
 const failures = [];
 function assert(cond, msg) {
@@ -84,6 +84,42 @@ async function main() {
     Math.abs(t.x - 5) < 0.05 && Math.abs(t.z - 5) < 0.05,
     `fullMatchReset teleported the rapier body (${JSON.stringify(t)})`
   );
+
+  // Tap-C must resize the live capsule (setHalfHeight) then stand again without WASM abort.
+  // (5,5) sits inside mid-yard props — use the default open spawn.
+  player.fullMatchReset(new THREE.Vector3(0, PLAYER_HEIGHT, 8));
+  player.keys.add('KeyC');
+  player.update(1 / 60, mapData.colliders, mapData.floors, []);
+  physics.step(1 / 60);
+  assert(player.crouching === true, 'rapier: first C crouches');
+  assert(
+    Math.abs(player._rapier.height - PLAYER_CROUCH_HEIGHT) < 0.05,
+    `rapier capsule crouch height ${player._rapier.height}`
+  );
+  player.keys.delete('KeyC');
+  player.update(1 / 60, mapData.colliders, mapData.floors, []);
+  physics.step(1 / 60);
+  assert(player.crouching === true, 'rapier: releasing C stays crouched');
+  player.keys.add('KeyW');
+  for (let i = 0; i < 20; i++) {
+    player.update(1 / 60, mapData.colliders, mapData.floors, []);
+    physics.step(1 / 60);
+    assert(Number.isFinite(player.position.y), `crouch-walk frame ${i} finite`);
+  }
+  player.keys.delete('KeyW');
+  player.keys.add('KeyC');
+  player.update(1 / 60, mapData.colliders, mapData.floors, []);
+  physics.step(1 / 60);
+  assert(player.crouching === false, 'rapier: second C stands');
+  assert(
+    Math.abs(player._rapier.height - PLAYER_HEIGHT) < 0.05,
+    `rapier capsule stand height ${player._rapier.height}`
+  );
+  for (let i = 0; i < 20; i++) {
+    player.update(1 / 60, mapData.colliders, mapData.floors, []);
+    physics.step(1 / 60);
+    assert(Number.isFinite(player.position.y), `post-stand frame ${i} finite`);
+  }
 
   const report = { ok: failures.length === 0, flatFeet, maxFeet, failures };
   console.log(JSON.stringify(report, null, 2));

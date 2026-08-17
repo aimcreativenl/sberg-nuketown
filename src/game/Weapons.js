@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { roundedBoxGeo } from './softGeo.js';
-import { VIEWMODEL_LAYER } from './constants.js';
+import { VIEWMODEL_LAYER, HIP_RECOIL_MUL, ADS_RECOIL_MUL } from './constants.js';
 
 /** Player loadout (hotkeys 1 / 2) — Phase A light TTK (snappier than sponge) */
 export const LOADOUT = [
@@ -811,17 +811,19 @@ export class WeaponController {
       // Consume a tap/click when that tap actually fired (pistol + look-pad M16 taps)
       if (shootClick) input.onSemiFire?.();
 
-      // Phase A viewmodel juice — stronger punch / kick / recoil per shot
+      // Hip-fire kicks harder than ADS. Use the held/scope target, not lagged adsBlend,
+      // so a hip shot after ADS is not still "ADS-soft" (and vice versa).
       const kick =
         def.id === 'm16' ? 0.58 : def.id === 'shotgun' ? 1.35 : def.id === 'pistol' ? 0.78 : 0.65;
-      const aimKick = THREE.MathUtils.lerp(1, 0.32, this.adsBlend);
-      this.recoil = Math.min(1.85, this.recoil + kick * THREE.MathUtils.lerp(1, 0.55, this.adsBlend));
+      const adsPose = this.adsHeld || this.isScoped() ? 1 : 0;
+      const aimKick = THREE.MathUtils.lerp(HIP_RECOIL_MUL, ADS_RECOIL_MUL, adsPose);
+      this.recoil = Math.min(1.85, this.recoil + kick * aimKick);
       this.kickPitch += (0.032 + kick * 0.028) * aimKick;
       this.kickYaw += (Math.random() - 0.5) * 0.022 * kick * aimKick;
-      const punchZ = Math.min(0.055, 0.03 + kick * 0.03);
+      const punchZ = Math.min(0.055, 0.03 + kick * 0.03) * aimKick;
       this.punchPos.set(
-        (Math.random() - 0.5) * 0.045,
-        0.04 + kick * 0.035,
+        (Math.random() - 0.5) * 0.045 * aimKick,
+        (0.04 + kick * 0.035) * aimKick,
         punchZ
       );
 

@@ -9,6 +9,7 @@ import {
   PLAYER_COYOTE,
   GRAVITY,
   PLAYER_HEIGHT,
+  PLAYER_CROUCH_HEIGHT,
   PLAYER_RADIUS,
   PLAYER_MAX_HP,
   USE_RAPIER_PLAYER,
@@ -21,7 +22,7 @@ import {
   isStepableSolid,
   beltCarryDelta,
 } from './movement.js';
-import { playerMoveBlocked } from './collision.js';
+import { playerMoveBlocked, playerPositionBlocked, clampEyeUnderCeiling } from './collision.js';
 import { getSettings, lookScale } from '../settings/Settings.js';
 import { gyroLookActive } from '../input/GyroLook.js';
 
@@ -59,6 +60,7 @@ export class Player {
     this.killStreak = 0;
     this.radius = PLAYER_RADIUS;
     this.height = PLAYER_HEIGHT;
+    this.crouching = false;
     this.keys = new Set();
     this.mouse = { dx: 0, dy: 0 };
     this.buttons = { left: false, right: false };
@@ -77,6 +79,9 @@ export class Player {
     this.timeSinceDamage = 99;
     /** Space key edge tracking for double-Space roof mantle */
     this._spaceHeld = false;
+    /** C is tap-toggle (not hold). Latch survives a press+release inside one frame. */
+    this._cHeld = false;
+    this._crouchToggleQueued = false;
     /** True after a jump until grounded again (second Space = mantle attempt) */
     this._airJumpUsed = false;
     /** Brief lockout so mantle does not re-trigger immediately */
@@ -139,9 +144,10 @@ export class Player {
       // Ignore OS key-repeat so one R press = one reload request
       if (e.code === 'KeyR' && !e.repeat) this.reloadPressed = true;
       if (e.code === 'KeyE' && !e.repeat) this.usePressed = true;
+      if (e.code === 'KeyC' && !e.repeat) this._crouchToggleQueued = true;
       if (!e.repeat && (e.code === 'Digit1' || e.code === 'Numpad1')) this.weaponSlotPressed = 0;
       if (!e.repeat && (e.code === 'Digit2' || e.code === 'Numpad2')) this.weaponSlotPressed = 1;
-      if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) e.preventDefault();
+      if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC'].includes(e.code)) e.preventDefault();
     };
     this._onKeyUp = (e) => {
       if (isTypingTarget(e.target)) return;
@@ -218,12 +224,76 @@ export class Player {
     this._lastFloorY = Math.max(0, this.position.y - this.height);
     this._airJumpUsed = false;
     this._spaceHeld = false;
+    this._cHeld = false;
+    this._crouchToggleQueued = false;
+    this.crouching = false;
+    this.height = PLAYER_HEIGHT;
     this._mantleCooldown = 0;
     this.clearFireLatches();
+    this.physics?.setCharacterHeight?.(this._rapier, this.height);
     // Phase 1c: keep the Rapier capsule in sync with respawns/full match resets.
     if (this._rapier && this.physics) {
       this.physics.teleport(this._rapier, this.position.x, this.position.y, this.position.z);
     }
+  }
+
+  /** Head + chest spheres used by bot / offline hitscan. */
+  getHitSpheres() {
+    const eye = this.position;
+    const chestY = eye.y - this.height * 0.22;
+    return {
+      head: { x: eye.x, y: eye.y, z: eye.z, radius: 0.28 },
+      chest: { x: eye.x, y: chestY, z: eye.z, radius: 0.45 },
+    };
+  }
+
+  /**
+   * Tap-C toggle: first press crouch, second press stand. Releasing C does nothing.
+   * Refuse to stand if a slab / low cover is overhead.
+   */
+  applyStance(colliders) {
+    const cDown = this.keys.has('KeyC');
+    const pressed = this._crouchToggleQueued || (cDown && !this._cHeld);
+    this._cHeld = cDown;
+    this._crouchToggleQueued = false;
+    if (!pressed) return;
+    if (this.crouching) this._tryStand(colliders);
+    else this._enterCrouch();
+  }
+
+  _enterCrouch() {
+    const feet = this.position.y - this.height;
+    this.crouching = true;
+    this.height = PLAYER_CROUCH_HEIGHT;
+    this.position.y = feet + this.height;
+    this.physics?.setCharacterHeight?.(this._rapier, this.height);
+  }
+
+  _tryStand(colliders) {
+    const standH = PLAYER_HEIGHT;
+    const crouchH = this.height;
+    const feet = this.position.y - crouchH;
+    const standEye = feet + standH;
+    const probe = this._next.copy(this.position);
+    probe.y = standEye;
+    const prevH = this.height;
+    this.height = standH;
+    // Only the new volume above the crouched head — walls/bushes beside us must not trap the stance.
+    const blocked =
+      this._resolveCeiling(probe, colliders) ||
+      playerPositionBlocked(probe, colliders, {
+        height: standH,
+        radius: this.radius,
+        bodyMinY: feet + crouchH + 0.02,
+        bodyMaxY: standEye - 0.05,
+      });
+    this.height = prevH;
+    if (blocked) return false;
+    this.crouching = false;
+    this.height = standH;
+    this.position.y = standEye;
+    this.physics?.setCharacterHeight?.(this._rapier, this.height);
+    return true;
   }
 
   /** Drop leftover LMB / click-buffer so PLAY and slot swaps cannot auto-fire. */
@@ -324,6 +394,7 @@ export class Player {
     // legacy AABB mover below whenever physics hasn't been wired up yet — keeps
     // test:physics-* scripts, which never call setPhysics(), green).
     const usingRapier = USE_RAPIER_PLAYER && !!this._rapier && !!this.physics;
+    this.applyStance(colliders);
 
     // Slow passive regen: 2 HP/s after 4s without taking damage
     this.timeSinceDamage += dt;
@@ -334,8 +405,8 @@ export class Player {
     // Look sensitivity (hip vs ADS/scope + invert Y live from Settings)
     this.updateLook(false, dt);
 
-    const sprint = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
-    const speed = sprint ? PLAYER_SPRINT : PLAYER_SPEED;
+    const sprint = !this.crouching && (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'));
+    const speed = this.crouching ? PLAYER_SPEED * 0.52 : sprint ? PLAYER_SPRINT : PLAYER_SPEED;
 
     let mx = 0;
     let mz = 0;
@@ -458,6 +529,11 @@ export class Player {
       if (result) {
         next.set(result.x, result.y, result.z);
         this.grounded = result.grounded;
+        if (this._resolveCeiling(next, colliders)) {
+          this.physics.setNextTranslation(this._rapier, next.x, next.y, next.z);
+          if (this._rapier.verticalVel > 0) this._rapier.verticalVel = 0;
+          this.grounded = false;
+        }
         if (this.grounded) {
           this.coyote = PLAYER_COYOTE;
           this._lastFloorY = result.y - this.height;
@@ -672,33 +748,7 @@ export class Player {
    * @returns {boolean} true if clamped
    */
   _resolveCeiling(pos, colliders) {
-    const headPad = 0.12;
-    const headY = pos.y + headPad;
-    const feet = pos.y - this.height;
-    const r = this.radius * 0.88;
-    let ceilY = null;
-    for (const c of colliders || []) {
-      if (c && c.solid === false) continue;
-      // Climb/step pads sit at waist height while ascending — never treat as ceilings
-      if (c && (c.kind === 'climb_pad' || c.kind === 'roof_climb')) continue;
-      const box = c.box || c;
-      if (!box?.min) continue;
-      // Only treat as ceiling if we're standing below its underside
-      if (feet >= box.min.y - 0.02) continue;
-      if (pos.x + r <= box.min.x || pos.x - r >= box.max.x) continue;
-      if (pos.z + r <= box.min.z || pos.z - r >= box.max.z) continue;
-      // Eye already clear above this slab (e.g. next stair tread) — not a head-bonk
-      if (pos.y > box.max.y + 0.35) continue;
-      if (headY > box.min.y && feet < box.min.y) {
-        const y = box.min.y - headPad;
-        if (ceilY == null || y < ceilY) ceilY = y;
-      }
-    }
-    if (ceilY != null && pos.y > ceilY) {
-      pos.y = ceilY;
-      return true;
-    }
-    return false;
+    return clampEyeUnderCeiling(pos, this.height, this.radius, colliders);
   }
 
   /**

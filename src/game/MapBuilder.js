@@ -496,11 +496,11 @@ export function buildMap(scene) {
     const wallT = 0.35;
 
     // L1 floor — plank texture (match outdoor material richness)
-    const f1 = box(W - wallT * 0.5, 0.22, D - wallT * 0.5, 0xe8c9a0, 0, 0.11, 0, { kind: 'floor' });
+    const f1 = box(W - wallT * 0.5, 0.08, D - wallT * 0.5, 0xe8c9a0, 0, 0.04, 0, { kind: 'floor' });
     f1.name = flip ? 'floor_l1_east' : 'floor_l1_west';
     house.add(f1);
     // Ground floor walkable — stairwell still has L1 under the stairs (fine)
-    addFloor(floors, cx - W / 2 + 0.3, cx + W / 2 - 0.3, cz - D / 2 + 0.3, cz + D / 2 - 0.3, 0.25);
+    addFloor(floors, cx - W / 2 + 0.3, cx + W / 2 - 0.3, cz - D / 2 + 0.3, cz + D / 2 - 0.3, 0);
 
     // L2 slab is built AFTER stairs so we can leave a real stairwell hole
     // (prevents getting trapped upstairs with no way down).
@@ -1051,7 +1051,7 @@ export function buildMap(scene) {
     const stairX = -3.35;
     const stairW = 2.15;
     const L2y = floor2 + 0.1; // 3.2
-    const L1y = 0.25;
+    const L1y = 0;
     const stepCount = 14;
     const rise = (L2y - L1y) / stepCount; // ~0.21 — within player step-up
     // Slightly longer run + less Z-overlap so Rapier autostep sees clean risers

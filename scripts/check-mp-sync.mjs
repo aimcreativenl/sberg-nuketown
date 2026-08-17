@@ -49,12 +49,14 @@ assert(INPUT_HZ === 30, `INPUT_HZ === 30 (got ${INPUT_HZ})`);
   assert(typeof f.interact === 'boolean', 'emptyInputFrame.interact');
   assert(typeof f.weaponSlot === 'number', 'emptyInputFrame.weaponSlot');
   assert(typeof f.aimHold === 'boolean', 'emptyInputFrame.aimHold');
+  assert(typeof f.crouch === 'boolean', 'emptyInputFrame.crouch');
 }
 
 // ─── sampleInputFrame from mock Player ─────────────────────────────────
 {
   const player = {
-    keys: new Set(['KeyW', 'ShiftLeft', 'Space']),
+    keys: new Set(['KeyW', 'ShiftLeft', 'Space', 'KeyC']),
+    crouching: true,
     buttons: { left: true, right: true },
     yaw: 0.5,
     pitch: -0.2,
@@ -81,6 +83,19 @@ assert(INPUT_HZ === 30, `INPUT_HZ === 30 (got ${INPUT_HZ})`);
   assert(frame.yaw === 0.5, 'sampleInputFrame yaw');
   assert(frame.pitch === -0.2, 'sampleInputFrame pitch');
   assert(frame.weaponSlot === 1, 'sampleInputFrame weaponSlot');
+  assert(frame.crouch === true, 'sampleInputFrame crouch from player.crouching');
+}
+
+{
+  const player = {
+    keys: new Set(['KeyC']),
+    crouching: false,
+    buttons: { left: false, right: false },
+    yaw: 0,
+    pitch: 0,
+  };
+  const frame = sampleInputFrame(player, { seq: 8, tick: 13, dt: 0.016 });
+  assert(frame.crouch === false, 'KeyC held without crouching is not a crouch frame');
 }
 
 {

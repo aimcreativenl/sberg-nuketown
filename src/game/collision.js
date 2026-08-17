@@ -87,13 +87,54 @@ export function botPositionBlocked(pos, colliders, radius = BOT_COLLIDE_RADIUS) 
  * @param {Array} colliders
  * @param {{ radius?: number, height?: number }} [opts]
  */
+/** Slabs that may stop a jump from below. Furniture/cover must never do this. */
+const CEILING_KINDS = new Set(['house_floor', 'house_roof']);
+
+/**
+ * Push eye down if the head crosses a real overhead slab (L2 / roof).
+ * Low colliders (sofas, counters) are not ceilings — treating them as such
+ * buried the capsule in the floor and Rapier flung the player across the map.
+ * @returns {boolean} true if `eyePos.y` was clamped
+ */
+export function clampEyeUnderCeiling(eyePos, height, radius, colliders) {
+  const headPad = 0.12;
+  const headY = eyePos.y + headPad;
+  const feet = eyePos.y - height;
+  const r = radius * 0.88;
+  // Underside must sit above mid-torso so a coffee table cannot yank the eye to 0.1
+  const minUnder = feet + Math.max(0.85, height * 0.5);
+  let ceilY = null;
+  for (const c of colliders || []) {
+    if (c && c.solid === false) continue;
+    const kind = c?.kind;
+    if (kind === 'climb_pad' || kind === 'roof_climb' || kind === 'stair_tread') continue;
+    const box = c?.box || c;
+    if (!box?.min) continue;
+    if (kind && !CEILING_KINDS.has(kind)) continue;
+    if (box.min.y < minUnder) continue;
+    if (feet >= box.min.y - 0.02) continue;
+    if (eyePos.x + r <= box.min.x || eyePos.x - r >= box.max.x) continue;
+    if (eyePos.z + r <= box.min.z || eyePos.z - r >= box.max.z) continue;
+    if (eyePos.y > box.max.y + 0.35) continue;
+    if (headY > box.min.y && feet < box.min.y) {
+      const y = box.min.y - headPad;
+      if (ceilY == null || y < ceilY) ceilY = y;
+    }
+  }
+  if (ceilY != null && eyePos.y > ceilY) {
+    eyePos.y = ceilY;
+    return true;
+  }
+  return false;
+}
+
 export function playerPositionBlocked(eyePos, colliders, opts = {}) {
   const radius = opts.radius ?? 0.38;
   const height = opts.height ?? 1.7;
   return positionBlockedBySolids(eyePos, colliders, {
     radius,
-    bodyMinY: eyePos.y - height + 0.15,
-    bodyMaxY: eyePos.y - 0.1,
+    bodyMinY: opts.bodyMinY ?? eyePos.y - height + 0.15,
+    bodyMaxY: opts.bodyMaxY ?? eyePos.y - 0.1,
   });
 }
 
@@ -253,9 +294,21 @@ export function colliderBlocksShot(c, minHeight = 0.5) {
   if (!colliderIsActiveSolid(c)) return false;
   const box = c?.box || c;
   if (!box?.min || !box?.max) return false;
+  if (c.blocksShot === false) return false;
   if (c.blocksShot === true) return true;
   const kind = c.kind;
-  if (kind === 'house_wall' || kind === 'house_door' || kind === 'house_floor') return true;
+  if (kind === 'glass' || kind === 'hangar_glass') return false;
+  if (
+    kind === 'house_wall' ||
+    kind === 'house_door' ||
+    kind === 'house_floor' ||
+    kind === 'house_roof' ||
+    kind === 'house_furniture' ||
+    kind === 'cover' ||
+    kind === 'stair_tread'
+  ) {
+    return isSolidColliderBox(box, 0.22);
+  }
   return isSolidColliderBox(box, minHeight);
 }
 

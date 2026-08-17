@@ -166,6 +166,23 @@ assert(juiceP.kickPitch > 0, `pistol kickPitch > 0 got ${juiceP.kickPitch}`);
 assert(juiceP.punchLength > 0, `pistol punchLength > 0 got ${juiceP.punchLength}`);
 assert(juiceP.ammo === wc.currentAmmo, 'juice ammo matches');
 
+// Hip-fire must kick harder than ADS on the same gun (one shot each).
+const hipGun = new WeaponController(camera, null, null, null);
+const adsGun = new WeaponController(camera, null, null, null);
+hipGun.adsHeld = false;
+hipGun.adsBlend = 0;
+adsGun.adsHeld = true;
+adsGun.adsBlend = 1;
+const hipKickBefore = hipGun.kickPitch;
+const adsKickBefore = adsGun.kickPitch;
+hipGun.update(1 / 60, makeInput({ shoot: true, shootClick: true, aimHold: false }), true);
+adsGun.update(1 / 60, makeInput({ shoot: true, shootClick: true, aimHold: true }), true);
+const hipKick = hipGun.kickPitch - hipKickBefore;
+const adsKick = adsGun.kickPitch - adsKickBefore;
+assert(hipKick > 0 && adsKick > 0, `both poses kick (hip=${hipKick.toFixed(4)} ads=${adsKick.toFixed(4)})`);
+assert(hipKick > adsKick, `hip kick ${hipKick.toFixed(4)} > ADS kick ${adsKick.toFixed(4)}`);
+assert(hipGun.recoil > adsGun.recoil, `hip recoil ${hipGun.recoil.toFixed(3)} > ADS recoil ${adsGun.recoil.toFixed(3)}`);
+
 // Punch drives viewmodel (position includes punch after update)
 assert(wc.viewModel != null, 'viewModel present');
 const vmZ = wc.viewModel.position.z;

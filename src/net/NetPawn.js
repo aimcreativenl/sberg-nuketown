@@ -9,12 +9,13 @@ import {
   PLAYER_COYOTE,
   GRAVITY,
   PLAYER_HEIGHT,
+  PLAYER_CROUCH_HEIGHT,
   PLAYER_RADIUS,
   PLAYER_MAX_HP,
   USE_RAPIER_PLAYER,
 } from '../game/constants.js';
 import { applyGroundWish, applyAirWish, pickFloorY, isStepableSolid, beltCarryDelta } from '../game/movement.js';
-import { playerMoveBlocked } from '../game/collision.js';
+import { playerMoveBlocked, playerPositionBlocked, clampEyeUnderCeiling } from '../game/collision.js';
 
 const STEP_UP = 0.55;
 
@@ -42,6 +43,7 @@ export class NetPawn {
     this.grounded = true;
     this.radius = PLAYER_RADIUS;
     this.height = PLAYER_HEIGHT;
+    this.crouching = false;
     this.outfitIndex = outfitIndex;
     this._coyote = PLAYER_COYOTE;
     this._spaceWasDown = false;
@@ -73,6 +75,42 @@ export class NetPawn {
    * Wire Rapier character controller (same capsule pattern as Player).
    * @param {import('../physics/PhysicsManager.js').PhysicsManager|null} physicsManager
    */
+  _applyStance(wantCrouch, colliders) {
+    const standH = PLAYER_HEIGHT;
+    const crouchH = PLAYER_CROUCH_HEIGHT;
+    if (wantCrouch && !this.crouching) {
+      const feet = this.position.y - this.height;
+      this.crouching = true;
+      this.height = crouchH;
+      this.position.y = feet + this.height;
+      this.physics?.setCharacterHeight?.(this._rapier, this.height);
+      return;
+    }
+    if (!wantCrouch && this.crouching) {
+      const crouchH = this.height;
+      const feet = this.position.y - crouchH;
+      const standEye = feet + standH;
+      const probe = this._next.copy(this.position);
+      probe.y = standEye;
+      const prevH = this.height;
+      this.height = standH;
+      const blocked =
+        clampEyeUnderCeiling(probe, standH, this.radius, colliders) ||
+        playerPositionBlocked(probe, colliders, {
+          height: standH,
+          radius: this.radius,
+          bodyMinY: feet + crouchH + 0.02,
+          bodyMaxY: standEye - 0.05,
+        });
+      this.height = prevH;
+      if (blocked) return;
+      this.crouching = false;
+      this.height = standH;
+      this.position.y = standEye;
+      this.physics?.setCharacterHeight?.(this._rapier, this.height);
+    }
+  }
+
   setPhysics(physicsManager) {
     this.physics = physicsManager || null;
     if (this.physics && USE_RAPIER_PLAYER) {
@@ -147,12 +185,13 @@ export class NetPawn {
       this.pitch = input.pitch ?? this.pitch;
       this.weaponSlot = input.weaponSlot != null ? input.weaponSlot | 0 : this.weaponSlot;
       this.aiming = !!input.aimHold;
+      this._applyStance(!!input.crouch, world.colliders || []);
     }
 
     const mx = input?.moveX || 0;
     const mz = input?.moveZ || 0;
-    const sprint = !!input?.sprint;
-    const speed = sprint ? PLAYER_SPRINT : PLAYER_SPEED;
+    const sprint = !this.crouching && !!input?.sprint;
+    const speed = this.crouching ? PLAYER_SPEED * 0.52 : sprint ? PLAYER_SPRINT : PLAYER_SPEED;
 
     let wishX = 0;
     let wishZ = 0;
@@ -236,6 +275,11 @@ export class NetPawn {
         // result.y is eye height (same as Player / PhysicsManager contract)
         next.set(result.x, result.y, result.z);
         this.grounded = !!result.grounded;
+        if (clampEyeUnderCeiling(next, this.height, this.radius, colliders)) {
+          physics.setNextTranslation(rapier, next.x, next.y, next.z);
+          if (rapier.verticalVel > 0) rapier.verticalVel = 0;
+          this.grounded = false;
+        }
         if (this.grounded) {
           this._coyote = PLAYER_COYOTE;
           this._lastFloorY = result.y - this.height;
@@ -257,6 +301,9 @@ export class NetPawn {
       next.z += this.velocity.z * dt;
       this._resolveAxis(next, colliders, 'z', floors);
       next.y += this.velocity.y * dt;
+      if (clampEyeUnderCeiling(next, this.height, this.radius, colliders)) {
+        this.velocity.y = Math.min(0, this.velocity.y);
+      }
 
       const floorY = pickFloorY(next.y, this.height, next.x, next.z, floors, {
         stepUp: STEP_UP,
@@ -426,6 +473,9 @@ export class NetPawn {
     this._spaceWasDown = false;
     this._fireCd = 0;
     this._lastFloorY = Math.max(0, this.position.y - this.height);
+    this.crouching = false;
+    this.height = PLAYER_HEIGHT;
+    this.physics?.setCharacterHeight?.(this._rapier, this.height);
     if (this._rapier && this.physics) {
       this.physics.teleport(this._rapier, this.position.x, this.position.y, this.position.z);
     }
@@ -448,6 +498,7 @@ export class NetPawn {
       deaths: this.deaths,
       weapon: this.weaponSlot,
       aiming: this.aiming,
+      crouch: !!this.crouching,
       outfitIndex: this.outfitIndex | 0,
       ackSeq: this.lastSeq | 0,
     };

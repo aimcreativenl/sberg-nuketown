@@ -13,7 +13,12 @@ export const PLAYER_AIR_ACCEL = 2.5;
 export const PLAYER_COYOTE = 0.08;
 export const GRAVITY = 24;
 export const PLAYER_HEIGHT = 1.7;
+/** Eye height while crouched (tap C to toggle). Chest-height standing shots miss this pose. */
+export const PLAYER_CROUCH_HEIGHT = 1.0;
 export const PLAYER_RADIUS = 0.38;
+/** Hip-fire vs ADS camera/viewmodel kick. Hip must be strictly stronger. */
+export const HIP_RECOIL_MUL = 1.2;
+export const ADS_RECOIL_MUL = 0.34;
 /**
  * Hitscan sphere around the visual head cube (0.4×0.42×0.36, plus hat/ears).
  * Must cover cube corners (~0.34) so a scoped shot on the face/helmet is a headshot.

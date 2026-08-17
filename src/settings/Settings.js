@@ -270,6 +270,7 @@ function defaultSettings() {
     gyroSens: 1,
     volume: DEFAULT_VOLUME,
     muted: false,
+    blood: true,
   };
 }
 
@@ -286,6 +287,7 @@ function normalizeSettings(raw = {}) {
     gyroSens: clamp(raw.gyroSens ?? d.gyroSens, SENS_MIN, SENS_MAX),
     volume: clamp(raw.volume ?? d.volume, 0, 1),
     muted: !!raw.muted,
+    blood: raw.blood === undefined ? d.blood : !!raw.blood,
   };
 }
 
@@ -390,6 +392,12 @@ export function applyToGame(game) {
     game.audio?.setMuted?.(settings.muted);
   } catch (err) {
     console.warn('[Settings] applyToGame: audio failed', err);
+  }
+
+  try {
+    game.ui?.setBloodEnabled?.(settings.blood !== false);
+  } catch (err) {
+    console.warn('[Settings] applyToGame: blood fx failed', err);
   }
 
   try {

@@ -179,6 +179,49 @@ export const PRETZEL_WALKS = [
   { x: 8, z: 12, w: 38, d: 3.8, y: 4.6 },
 ];
 
+/** Three factory silos on the empty south apron (dry, south of chocolate). */
+export const CANDY_SILOS = [
+  { id: 'berry', x: -18, z: -55, r: 2.15, color: 0xff6a9a, candy: 0xff8fab, band: 0xffd0dc },
+  { id: 'choco', x: -4, z: -57, r: 2.25, color: 0x6b3a28, candy: 0xc47848, band: 0xe8c8a0 },
+  { id: 'lemon', x: 10, z: -55, r: 2.1, color: 0xffe066, candy: 0xfff3a8, band: 0xfff8d8 },
+];
+
+/** Crouch-only licorice culvert across the south apron. Standing does not fit. */
+export const LICORICE_PIPE = {
+  id: 'licorice_pipe',
+  x0: -8,
+  x1: 16,
+  z: -46.4,
+  innerW: 1.92,
+  innerH: 1.18,
+  wall: 0.4,
+};
+
+/** Giant jawbreaker cover balls in leftover dry pockets. */
+export const JAWBREAKERS = [
+  { x: 34, z: 30, r: 1.35, color: 0xff4d6d },
+  { x: 42, z: -24, r: 1.18, color: 0x5edc78 },
+  { x: -52, z: 20, r: 1.28, color: 0x7ec8e8 },
+  { x: 18, z: 36, r: 1.12, color: 0xc9a0e8 },
+  { x: -36, z: 8, r: 1.22, color: 0xffe066 },
+  { x: 30, z: -32, r: 1.08, color: 0xff9bb8 },
+];
+
+/** Walk-through candy-cane arches (east dry yard). */
+export const CANDY_CANE_ARCHES = [
+  { x: 36, z: 26, yaw: 0 },
+  { x: 36, z: 32, yaw: 0 },
+  { x: 36, z: 38, yaw: 0 },
+];
+
+/** Soft marshmallow crate-stacks. */
+export const MARSHMALLOWS = [
+  { x: 28, z: 36, n: 3 },
+  { x: 48, z: 22, n: 4 },
+  { x: -44, z: 28, n: 3 },
+  { x: 22, z: -52, n: 3 },
+];
+
 export const LOLLIPOPS = [
   { x: -22, z: -28 },
   { x: -34, z: 22 },

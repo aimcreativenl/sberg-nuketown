@@ -30,6 +30,7 @@ assert(s0.gyroMode === 'always', `default gyroMode is always (got ${s0.gyroMode}
 assert(s0.gyroSens === 1, `default gyroSens is 1 (got ${s0.gyroSens})`);
 assert(s0.volume === 0.35, `default volume is 0.35 (got ${s0.volume})`);
 assert(s0.muted === false, 'default muted is off');
+assert(s0.blood === true, 'default blood is on');
 assert(GRAPHICS_PRESETS[s0.graphicsPreset], 'default graphics preset is known');
 
 patchSettings({ mouseSens: 2, adsSens: 0.5, invertY: true, volume: 0.8, muted: true });
@@ -39,6 +40,10 @@ assert(s1.adsSens === 0.5, `patch adsSens (got ${s1.adsSens})`);
 assert(s1.invertY === true, 'patch invertY');
 assert(s1.volume === 0.8, `patch volume (got ${s1.volume})`);
 assert(s1.muted === true, 'patch muted');
+patchSettings({ blood: false });
+assert(getSettings().blood === false, 'patch blood off');
+patchSettings({ blood: true });
+assert(getSettings().blood === true, 'patch blood on');
 
 patchSettings({ mouseSens: 9, adsSens: 0 });
 const clamped = getSettings();
@@ -195,9 +200,27 @@ const audio = {
   },
 };
 patchSettings({ volume: 0.42, muted: true });
-applyToGame({ audio });
+let bloodFx = null;
+applyToGame({
+  audio,
+  ui: {
+    setBloodEnabled(on) {
+      bloodFx = on;
+    },
+  },
+});
 assert(audio.vol === 0.42, `applyToGame sets volume (got ${audio.vol})`);
 assert(audio.mute === true, 'applyToGame sets muted');
+assert(bloodFx === true, 'applyToGame applies blood fx');
+patchSettings({ blood: false });
+applyToGame({
+  ui: {
+    setBloodEnabled(on) {
+      bloodFx = on;
+    },
+  },
+});
+assert(bloodFx === false, 'applyToGame turns blood drips off');
 
 // Restore defaults so this process cannot leak into later imports.
 patchSettings({
@@ -209,6 +232,7 @@ patchSettings({
   gyroSens: 1,
   volume: 0.35,
   muted: false,
+  blood: true,
   graphicsPreset: 'high',
 });
 

@@ -1,4 +1,27 @@
+import * as THREE from 'three';
 import { HEAD_HIT_RADIUS } from './constants.js';
+
+/**
+ * Ray vs sphere. Shared by player hitscan and crouch tests.
+ * @returns {{ dist: number, point: THREE.Vector3 } | null}
+ */
+export function rayHitsSphere(origin, dir, center, radius) {
+  const ox = origin.x - center.x;
+  const oy = origin.y - center.y;
+  const oz = origin.z - center.z;
+  const b = ox * dir.x + oy * dir.y + oz * dir.z;
+  const c = ox * ox + oy * oy + oz * oz - radius * radius;
+  const disc = b * b - c;
+  if (disc < 0) return null;
+  const s = Math.sqrt(disc);
+  let t = -b - s;
+  if (t < 0) t = -b + s;
+  if (t < 0 || t > 200) return null;
+  return {
+    dist: t,
+    point: new THREE.Vector3(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t),
+  };
+}
 
 /** Extra metres so a hit on the helmet brim / neck still counts as head. */
 const HEAD_SLOP = 0.04;

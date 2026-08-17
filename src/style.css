@@ -1968,23 +1968,147 @@ kbd {
   background: rgba(255, 248, 242, 0.05);
 }
 
-/* Hurt flash */
-#app.hurt::after {
-  content: '';
+/* Incoming-hit blood rim + compass chevrons */
+#hit-feedback {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 15;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(255, 100, 130, 0.35) 100%);
-  animation: hurtFlash 0.25s ease-out forwards;
+  z-index: 16;
+  overflow: hidden;
 }
 
-@keyframes hurtFlash {
-  from {
-    opacity: 1;
-  }
-  to {
+#hit-vignette {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background:
+    radial-gradient(
+      ellipse 52% 46% at 50% 48%,
+      transparent 18%,
+      rgba(210, 22, 48, 0.08) 48%,
+      rgba(170, 10, 32, 0.42) 76%,
+      rgba(110, 4, 22, 0.78) 100%
+    );
+  box-shadow:
+    inset 0 0 140px 36px rgba(120, 6, 22, 0.55),
+    inset 0 0 50px 16px rgba(255, 40, 64, 0.28);
+  transition: opacity 0.08s linear;
+}
+
+#hit-vignette.is-low {
+  background:
+    radial-gradient(
+      ellipse 48% 42% at 50% 48%,
+      transparent 14%,
+      rgba(180, 10, 32, 0.16) 50%,
+      rgba(140, 6, 24, 0.55) 78%,
+      rgba(80, 0, 14, 0.86) 100%
+    );
+}
+
+#hit-drips {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+#hit-feedback.no-blood #hit-drips {
+  display: none;
+}
+
+.hit-drip {
+  position: absolute;
+  top: -8%;
+  width: var(--drip-w, 7px);
+  height: var(--drip-h, 58px);
+  border-radius: 50% 50% 45% 45%;
+  background: linear-gradient(
+    180deg,
+    rgba(190, 20, 40, 0.15) 0%,
+    rgba(150, 8, 26, 0.82) 28%,
+    rgba(110, 4, 18, 0.95) 72%,
+    rgba(70, 0, 10, 0.7) 100%
+  );
+  box-shadow: 0 0 10px rgba(160, 12, 28, 0.55);
+  opacity: 0;
+  animation: hitDripDown var(--drip-dur, 1.15s) var(--drip-delay, 0s) cubic-bezier(0.35, 0.02, 0.7, 0.35) forwards;
+  will-change: transform, opacity;
+}
+
+.hit-drip.is-bead {
+  border-radius: 50%;
+  height: var(--drip-w, 7px);
+  box-shadow: 0 0 8px rgba(180, 16, 32, 0.65);
+}
+
+@keyframes hitDripDown {
+  0% {
+    transform: translate3d(0, -12vh, 0) scaleY(0.25);
     opacity: 0;
+  }
+  10% {
+    opacity: 0.95;
+  }
+  70% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate3d(var(--drip-sway, 0px), 88vh, 0) scaleY(1.2);
+    opacity: 0;
+  }
+}
+
+#hit-dirs {
+  position: absolute;
+  inset: 0;
+}
+
+.hit-dir {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 88px;
+  height: 88px;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+.hit-dir-inner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transform: translate(-50%, calc(-1 * min(34vh, 280px)));
+}
+
+.hit-chevron {
+  width: 0;
+  height: 0;
+  border-left: 16px solid transparent;
+  border-right: 16px solid transparent;
+  border-bottom: 18px solid rgba(255, 72, 92, 0.92);
+  filter: drop-shadow(0 0 8px rgba(255, 48, 72, 0.75));
+}
+
+.hit-chevron-far {
+  border-left-width: 13px;
+  border-right-width: 13px;
+  border-bottom-width: 12px;
+  opacity: 0.55;
+}
+
+@media (max-width: 900px) {
+  .hit-dir-inner {
+    transform: translate(-50%, calc(-1 * min(30vh, 200px)));
+  }
+  .hit-chevron {
+    border-left-width: 13px;
+    border-right-width: 13px;
+    border-bottom-width: 14px;
   }
 }
 
