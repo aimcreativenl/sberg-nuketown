@@ -33,6 +33,13 @@ const m1 = createMat(0xff8fab, { name: 'test' });
 assert(isStandardMaterial(m1), 'createMat returns MeshStandardMaterial');
 assert(m1.roughness > 0.2, 'createMat has roughness');
 assert(typeof m1.metalness === 'number', 'createMat has metalness');
+const donutA = createMat(0xff8fab, { roughness: 0.55, emissive: 0xff6a90, emissiveIntensity: 0.08, cache: false });
+const donutB = createMat(0xff8fab, { roughness: 0.55, emissive: 0xff6a90, emissiveIntensity: 0.08, cache: false });
+assert(donutA !== donutB, 'uncached donut mats are unique');
+donutA.transparent = true;
+donutA.opacity = 0.15;
+assert(donutB.opacity === 1, 'fading one donut does not fade another');
+assert(m1.opacity === 1, 'fading a donut does not fade cached world mats');
 
 const grass = createGrassMat();
 const road = createRoadMat();

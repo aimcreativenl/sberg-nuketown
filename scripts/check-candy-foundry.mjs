@@ -14,6 +14,10 @@ import {
   SUGAR_WORKS,
   TASTING_KIOSK,
   CONVEYOR,
+  CUPCAKE_KIOSK,
+  GUMMY_BEARS,
+  SOFT_SERVE,
+  GIFT_GANTRY,
 } from '../src/maps/candy-foundry/layout.js';
 import {
   DEFAULT_MAP_ID,
@@ -92,6 +96,7 @@ data.group.traverse((o) => {
 });
 assert(flowNames.length >= 3, `syrup flow planes >= 3 (got ${flowNames.length})`);
 assert(typeof data.tick === 'function', 'mapData.tick animates syrup');
+assert(typeof data.syncLights === 'function', 'mapData.syncLights culls far point lights');
 {
   const byKind = {};
   data.group.traverse((o) => {
@@ -151,8 +156,27 @@ for (const n of [
   'door_front_sugar_works',
   'door_side_sugar_works',
   'door_front_tasting_kiosk',
+  'door_front_cupcake_kiosk',
 ]) {
   assert(doorNames.includes(n), `door ${n}`);
+}
+assert(names.includes(CUPCAKE_KIOSK.id), 'cupcake_kiosk group');
+assert(names.includes('gummy_bears'), 'gummy_bears group');
+assert(names.includes(SOFT_SERVE.id), 'soft_serve_tower group');
+assert(names.includes(GIFT_GANTRY.id), 'gift_gantry group');
+assert(GUMMY_BEARS.length >= 3, 'three gummy bears authored');
+assert((data.belts || []).length >= 2, `belts include ground line + gantry (got ${data.belts?.length})`);
+{
+  const gantryBelt = (data.belts || []).find((b) => b.id === GIFT_GANTRY.id);
+  assert(gantryBelt && gantryBelt.speed > 0, 'gantry belt authored');
+  let box0 = null;
+  data.group.traverse((o) => {
+    if (!box0 && o.name === 'gantry_box_0') box0 = o;
+  });
+  assert(!!box0, 'gantry gift box 0');
+  const gx = box0.position.x;
+  data.tick(0.4);
+  assert(box0.position.x > gx + 0.4, `gantry box moved +X (Δ=${(box0.position.x - gx).toFixed(2)})`);
 }
 
 const eye = { height: PLAYER_HEIGHT, radius: PLAYER_RADIUS };
@@ -205,6 +229,22 @@ if (frontKiosk) {
   );
 } else {
   failures.push('missing door_front_tasting_kiosk for walk-in check');
+}
+{
+  const cupcakeDoor = (data.doors || []).find((d) => d.name === 'door_front_cupcake_kiosk');
+  if (cupcakeDoor) {
+    const p = cupcakeDoor.interact;
+    assert(blocked(p.x, p.z), 'cupcake door blocks when closed');
+    mgr.setOpen(cupcakeDoor.name, true);
+    assert(!blocked(p.x, p.z), 'cupcake door walkable when open');
+    const inner = { x: CUPCAKE_KIOSK.cx, z: CUPCAKE_KIOSK.cz };
+    assert(
+      !playerPositionBlocked({ x: inner.x, y: PLAYER_HEIGHT, z: inner.z }, data.colliders, eye),
+      'cupcake interior walkable'
+    );
+  } else {
+    failures.push('missing door_front_cupcake_kiosk for walk-in check');
+  }
 }
 
 assert(names.includes(TASTING_KIOSK.id), 'tasting_kiosk group');

@@ -27,7 +27,7 @@ import { ParticleSystem } from './Particles.js';
 import { GameAudio } from './Audio.js';
 import { GameUI } from './UI.js';
 import { GFX } from './materials.js';
-import { getSettings, setGraphicsPreset, patchSettings, applyToGame } from '../settings/Settings.js';
+import { getSettings, getGraphicsPreset, setGraphicsPreset, patchSettings, applyToGame } from '../settings/Settings.js';
 import { isTouchPlay, isTouchPortrait, shouldShowRotateHint } from '../input/detectPlayMode.js';
 import { TouchControls } from '../input/TouchControls.js';
 import { GyroLook } from '../input/GyroLook.js';
@@ -154,12 +154,26 @@ export class Game {
     /** Phase 1a/1b: Rapier physics world, created async via `initPhysics()` (see main.js). Null = legacy AABB fallback. */
     this.physics = null;
 
+    this._perf = false;
+    try {
+      const q = typeof location !== 'undefined' ? location.search : '';
+      this._perf =
+        /(?:^|[?&])perf=1(?:&|$)/.test(q) ||
+        (typeof localStorage !== 'undefined' && localStorage.getItem('sberg-perf') === '1');
+    } catch {
+      this._perf = false;
+    }
+    this._perfAcc = 0;
+    this._perfFrames = 0;
+    this._botAgents = [];
+    this._playerPosScratch = new THREE.Vector3();
+
     this._initRenderer();
     this._initScene();
     this.mapId = null;
     this.mapData = null;
     this.doors = null;
-    this.loadMap(DEFAULT_MAP_ID, { persist: false });
+    this.loadMap(readStoredMapId(), { persist: false });
     this.particles = new ParticleSystem(this.scene);
     this._syncMapSnow();
 
@@ -205,7 +219,7 @@ export class Game {
     this.bots = new BotManager(this.scene, this.mapData, {
       doors: this.doors,
       getPlayerPosition: () =>
-        this.player.alive ? this.player.position.clone() : null,
+        this.player.alive ? this._playerPosScratch.copy(this.player.position) : null,
       getPlayerAlive: () =>
         this.player.alive &&
         this.running &&
@@ -227,8 +241,6 @@ export class Game {
 
     this._bindUI();
     this._bindPointerLockClick();
-    const storedMap = readStoredMapId();
-    if (storedMap !== this.mapId) this.loadMap(storedMap);
     this._applyBotDifficulty(readStoredBotDifficulty(), { persist: false });
     this.ui.showStart();
     this._enterMenu();
@@ -433,11 +445,11 @@ export class Game {
       // Composer + FXAA handle AA; MSAA backbuffer is wasted on RT path
       antialias: false,
       powerPreference: 'high-performance',
-      // Keep last frame readable; also helps FP gun debug overlays
-      preserveDrawingBuffer: true,
+      preserveDrawingBuffer: false,
     });
-    // High-DPI path for 4K-class displays (capped for GPU sanity)
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GFX.maxPixelRatio));
+    const preset = getGraphicsPreset();
+    const prCap = preset.pixelRatioCap ?? GFX.maxPixelRatio;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, prCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
@@ -452,6 +464,7 @@ export class Game {
     }
     this.composer = null;
     this.fxaaPass = null;
+    this._bloomPass = null;
     this._postEnabled = true;
   }
 
@@ -575,7 +588,7 @@ export class Game {
     // Slightly lower sun = longer golden-hour soft shadows across the yard
     this.sun.position.set(42, 30, 20);
     this.sun.castShadow = true;
-    const sm = GFX.shadowMapSize;
+    const sm = getGraphicsPreset().shadowMapSize || GFX.shadowMapSize;
     this.sun.shadow.mapSize.set(sm, sm);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 150;
@@ -634,6 +647,8 @@ export class Game {
       bloom.strength = GFX.bloomStrength;
       bloom.radius = GFX.bloomRadius;
       this.composer.addPass(bloom);
+      this._bloomPass = bloom;
+      this._syncBloomResolution(w, h);
       const grade = new ShaderPass(PastelGradeShader);
       grade.name = 'PastelGradePass';
       this.composer.addPass(grade);
@@ -664,6 +679,13 @@ export class Game {
     if (!this.fxaaPass) return;
     const pr = this.renderer.getPixelRatio();
     this.fxaaPass.setSize(cssW * pr, cssH * pr);
+  }
+
+  /** Bloom at half backing-store size — same glow, far less fill. */
+  _syncBloomResolution(cssW, cssH) {
+    if (!this._bloomPass?.setSize) return;
+    const pr = this.renderer.getPixelRatio();
+    this._bloomPass.setSize(Math.max(1, cssW * pr * 0.5), Math.max(1, cssH * pr * 0.5));
   }
 
   _bindUI() {
@@ -1567,6 +1589,8 @@ export class Game {
     requestAnimationFrame(this._loop);
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.mapData?.tick?.(dt);
+    const lightFocus = this.running && this.player?.position ? this.player.position : this.camera?.position;
+    this.mapData?.syncLights?.(lightFocus);
 
     if (this.running && !this.paused && !this.matchOver) {
       if (this._mpWakeGrace > 0) this._mpWakeGrace = Math.max(0, this._mpWakeGrace - dt);
@@ -1581,6 +1605,22 @@ export class Game {
     }
 
     this._renderWorldAndViewmodel();
+    if (this._perf) this._tickPerf(dt);
+  }
+
+  _tickPerf(dt) {
+    this._perfAcc += dt;
+    this._perfFrames += 1;
+    if (this._perfAcc < 1) return;
+    const fps = this._perfFrames / this._perfAcc;
+    const info = this.renderer?.info?.render;
+    const mem = this.renderer?.info?.memory;
+    console.log(
+      `[perf] fps=${fps.toFixed(1)} calls=${info?.calls ?? '?'} tris=${info?.triangles ?? '?'} geo=${mem?.geometries ?? '?'} tex=${mem?.textures ?? '?'} map=${this.mapId}`
+    );
+    this._perfAcc = 0;
+    this._perfFrames = 0;
+    if (this.renderer?.info) this.renderer.info.reset();
   }
 
   _update(dt) {
@@ -1630,14 +1670,19 @@ export class Game {
     this.player._lookAim = !!this.weapons.isAiming?.();
     this.player._scopedLook = this.player._lookAim;
 
-    const botAgents = this.bots
-      .getAliveBots()
-      .map((b) => ({ x: b.position.x, z: b.position.z }));
+    const aliveBots = this.bots.getAliveBots();
+    const agents = this._botAgents;
+    agents.length = aliveBots.length;
+    for (let i = 0; i < aliveBots.length; i++) {
+      const slot = agents[i] || (agents[i] = { x: 0, z: 0 });
+      slot.x = aliveBots[i].position.x;
+      slot.z = aliveBots[i].position.z;
+    }
     const moveState = this.player.update(
       dt,
       this.mapData.colliders,
       this.mapData.floors,
-      botAgents
+      agents
     );
     // Phase 1d: bots queue kinematic moves before the shared world step so player
     // + bots commit in one Rapier tick (legacy bots ran after step and never touched physics).
@@ -2331,7 +2376,8 @@ export class Game {
     );
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GFX.maxPixelRatio));
+    const prCap = getGraphicsPreset().pixelRatioCap ?? GFX.maxPixelRatio;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, prCap));
     this.renderer.setSize(w, h, false);
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
@@ -2339,6 +2385,7 @@ export class Game {
       this.composer.setPixelRatio(this.renderer.getPixelRatio());
       this.composer.setSize(w, h);
       this._syncFxaaResolution(w, h);
+      this._syncBloomResolution(w, h);
     }
     this._syncTouchChrome();
   }

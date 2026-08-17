@@ -331,9 +331,30 @@ export function rayBlockedBySolids(from, to, colliders, opts = {}) {
   const tEnd = dist - (opts.tEndPad ?? 0.06);
   if (tEnd <= tMin) return false;
 
+  const x1 = ox + dirX * tEnd;
+  const y1 = oy + dirY * tEnd;
+  const z1 = oz + dirZ * tEnd;
+  const segMinX = ox < x1 ? ox : x1;
+  const segMaxX = ox < x1 ? x1 : ox;
+  const segMinY = oy < y1 ? oy : y1;
+  const segMaxY = oy < y1 ? y1 : oy;
+  const segMinZ = oz < z1 ? oz : z1;
+  const segMaxZ = oz < z1 ? z1 : oz;
+
   for (const c of colliders || []) {
     if (!colliderBlocksShot(c, minHeight)) continue;
     const box = c?.box || c;
+    if (!box?.min || !box?.max) continue;
+    if (
+      box.max.x < segMinX ||
+      box.min.x > segMaxX ||
+      box.max.y < segMinY ||
+      box.min.y > segMaxY ||
+      box.max.z < segMinZ ||
+      box.min.z > segMaxZ
+    ) {
+      continue;
+    }
     const tHit = rayAabbDistance(ox, oy, oz, dirX, dirY, dirZ, box, tEnd);
     if (tHit != null && tHit > tMin && tHit < tEnd) return true;
   }

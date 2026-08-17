@@ -20,11 +20,24 @@ export function flavorFromName(name, fallback = 'strawberry') {
   return fallback;
 }
 
+const _syrupLoader = typeof document !== 'undefined' ? new THREE.TextureLoader() : null;
+const _syrupBase = new Map();
+
 function makeSyrupMap(kind) {
   const flavor = SYRUP_BITMAPS[kind] ? kind : 'strawberry';
   const src = SYRUP_BITMAPS[flavor];
-  const canLoad = typeof document !== 'undefined';
-  const tex = canLoad ? new THREE.TextureLoader().load(src) : new THREE.Texture();
+  const canLoad = typeof document !== 'undefined' && _syrupLoader;
+  let tex;
+  if (canLoad) {
+    let base = _syrupBase.get(flavor);
+    if (!base) {
+      base = _syrupLoader.load(src);
+      _syrupBase.set(flavor, base);
+    }
+    tex = base.clone();
+  } else {
+    tex = new THREE.Texture();
+  }
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = THREE.LinearFilter;

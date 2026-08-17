@@ -14,6 +14,7 @@ function makeDonutMesh() {
       emissive: 0xff6a90,
       emissiveIntensity: 0.08,
       name: 'donut_frost',
+      cache: false,
     })
   );
   body.rotation.x = Math.PI / 2;
@@ -23,7 +24,7 @@ function makeDonutMesh() {
   // Inner dough hint
   const dough = new THREE.Mesh(
     new THREE.TorusGeometry(0.28, 0.08, 10, 20),
-    createMat(0xf0c987, { roughness: 0.85, name: 'donut_dough' })
+    createMat(0xf0c987, { roughness: 0.85, name: 'donut_dough', cache: false })
   );
   dough.rotation.x = Math.PI / 2;
   dough.position.y = -0.04;
@@ -40,6 +41,7 @@ function makeDonutMesh() {
         roughness: 0.4,
         emissive: sprinkleColors[i % sprinkleColors.length],
         emissiveIntensity: 0.25,
+        cache: false,
       })
     );
     s.position.set(Math.cos(ang) * r, 0.1 + Math.random() * 0.04, Math.sin(ang) * r);
@@ -119,10 +121,10 @@ export class DonutManager {
       // Fade near end
       if (d.age > d.lifetime - 3) {
         d.mesh.traverse((c) => {
-          if (c.material && c.material.opacity !== undefined) {
-            c.material.transparent = true;
-            c.material.opacity = Math.max(0.15, (d.lifetime - d.age) / 3);
-          }
+          const mat = c.material;
+          if (!mat || mat.opacity === undefined || mat.userData?.shared) return;
+          mat.transparent = true;
+          mat.opacity = Math.max(0.15, (d.lifetime - d.age) / 3);
         });
       }
 
@@ -146,7 +148,13 @@ export class DonutManager {
   }
 
   getPositions() {
-    return this.donuts.filter((d) => d.alive).map((d) => d.mesh.position.clone());
+    const out = this._posScratch || (this._posScratch = []);
+    out.length = 0;
+    for (let i = 0; i < this.donuts.length; i++) {
+      const d = this.donuts[i];
+      if (d.alive) out.push(d.mesh.position);
+    }
+    return out;
   }
 
   clear() {

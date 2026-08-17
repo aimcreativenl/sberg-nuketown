@@ -60,6 +60,13 @@ export class NetPawn {
     this.lastInputAt = 0;
     /** XZ clamp; Nuketown 38. MpMatch / world.bounds override for larger maps. */
     this.mapBounds = 38;
+    this._fwd = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._look = new THREE.Vector3();
+    this._up = new THREE.Vector3(0, 1, 0);
+    this._wish = new THREE.Vector3();
+    this._next = new THREE.Vector3();
+    this._euler = new THREE.Euler(0, 0, 0, 'YXZ');
   }
 
   /**
@@ -93,16 +100,16 @@ export class NetPawn {
   }
 
   get forward() {
-    return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
+    return this._fwd.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
   }
 
   get right() {
-    return new THREE.Vector3().crossVectors(this.forward, new THREE.Vector3(0, 1, 0)).normalize();
+    return this._right.crossVectors(this.forward, this._up).normalize();
   }
 
   get lookDirection() {
-    const e = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');
-    return new THREE.Vector3(0, 0, -1).applyEuler(e).normalize();
+    this._euler.set(this.pitch, this.yaw, 0, 'YXZ');
+    return this._look.set(0, 0, -1).applyEuler(this._euler).normalize();
   }
 
   /**
@@ -150,7 +157,7 @@ export class NetPawn {
     let wishX = 0;
     let wishZ = 0;
     if (mx !== 0 || mz !== 0) {
-      const wish = new THREE.Vector3();
+      const wish = this._wish.set(0, 0, 0);
       wish.addScaledVector(this.forward, -mz);
       wish.addScaledVector(this.right, mx);
       wish.y = 0;
@@ -212,7 +219,7 @@ export class NetPawn {
     const usingRapier = !!(physics && rapier);
 
     const prevFeet = this.position.y - this.height;
-    const next = this.position.clone();
+    const next = this._next.copy(this.position);
     const colliders = world.colliders || [];
     const floors = world.floors || [];
 

@@ -20,6 +20,10 @@ import { buildBuildings } from './buildings.js';
 import { buildYard } from './yard.js';
 import { buildTastingKiosk } from './kiosk.js';
 import { buildConveyor } from './conveyor.js';
+import { buildCupcakeKiosk } from './cupcakeKiosk.js';
+import { buildGummyBears } from './gummyBears.js';
+import { buildSoftServe } from './softServe.js';
+import { buildGiftGantry } from './giftGantry.js';
 import { disposeSyrupFlows, tickSyrupFlows } from './syrupFlow.js';
 
 export function buildCandyFoundry(scene) {
@@ -28,6 +32,10 @@ export function buildCandyFoundry(scene) {
   buildBuildings(ctx);
   buildTastingKiosk(ctx);
   buildConveyor(ctx);
+  buildCupcakeKiosk(ctx);
+  buildGummyBears(ctx);
+  buildSoftServe(ctx);
+  buildGiftGantry(ctx);
   buildYard(ctx);
 
   const safeSpawnPoints = (ctx.spawnPoints || []).filter((spawn) => {
@@ -42,6 +50,8 @@ export function buildCandyFoundry(scene) {
   scene.add(ctx.group);
   const flows = ctx.syrupFlows;
   const conveyors = ctx.conveyors;
+  const lights = ctx.pointLights || [];
+  const lightWorld = new THREE.Vector3();
   return {
     id: CANDY_MAP_ID,
     group: ctx.group,
@@ -64,6 +74,20 @@ export function buildCandyFoundry(scene) {
     tick(dt) {
       tickSyrupFlows(flows, dt);
       for (let i = 0; i < conveyors.length; i++) conveyors[i].tick?.(dt);
+    },
+    syncLights(focus) {
+      if (!focus || !lights.length) return;
+      const fx = focus.x;
+      const fz = focus.z;
+      for (let i = 0; i < lights.length; i++) {
+        const L = lights[i];
+        L.getWorldPosition(lightWorld);
+        const pad = L.userData.cullPad ?? 12;
+        const reach = (L.distance || 20) + pad;
+        const dx = lightWorld.x - fx;
+        const dz = lightWorld.z - fz;
+        L.visible = dx * dx + dz * dz < reach * reach;
+      }
     },
     dispose() {
       disposeSyrupFlows(flows);

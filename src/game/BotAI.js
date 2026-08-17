@@ -38,10 +38,10 @@ const BOT_JUMP_MAX_TOP = 1.35;
 const BOT_JUMP_COOLDOWN = 2.6;
 /** Forward air speed while vaulting (m/s) */
 const BOT_VAULT_AIR_SPEED = BOT_SPRINT * 1.2;
-const SIGHT_RANGE = 32;
+const SIGHT_RANGE = 46;
 const ATTACK_RANGE = 22;
 /** Any bot with LOS inside this range fights — not only the hunter slot list */
-const AGGRO_RANGE = 16;
+const AGGRO_RANGE = 20;
 const DONUT_RANGE = 12;
 const COMBAT_STOP_DIST = 6.5;
 const PLAYER_MIN_DIST = 3.2;
@@ -160,7 +160,42 @@ export class BotManager {
     this.physics = null;
     this._tmp = new THREE.Vector3();
     this._tmp2 = new THREE.Vector3();
+    this._preMove = new THREE.Vector3();
+    this._toPlayer = new THREE.Vector3();
+    this._toDest = new THREE.Vector3();
+    this._dest = new THREE.Vector3();
+    this._away = new THREE.Vector3();
+    this._awayP = new THREE.Vector3();
+    this._side = new THREE.Vector3();
+    this._dir = new THREE.Vector3();
+    this._next = new THREE.Vector3();
+    this._onlyX = new THREE.Vector3();
+    this._onlyZ = new THREE.Vector3();
+    this._from = new THREE.Vector3();
+    this._air = new THREE.Vector3();
+    this._losFrom = new THREE.Vector3();
+    this._losTo = new THREE.Vector3();
+    this._frame = 0;
+    this._anim = {
+      moving: false,
+      sprinting: false,
+      moveSpeed: 0,
+      grounded: true,
+      dead: false,
+      aiming: false,
+      reloading: false,
+      reloadT: 0,
+    };
     this.lastHunterCount = 3;
+  }
+
+  _setTarget(bot, src) {
+    if (!src) {
+      bot.target = null;
+      return null;
+    }
+    if (!bot.target) bot.target = new THREE.Vector3();
+    return bot.target.copy(src);
   }
 
   /**
@@ -250,7 +285,12 @@ export class BotManager {
       waypoint: null,
       coverPoint: null,
       peekTimer: 0,
-      peekState: 'hide', // hide | peak | shoot
+      peekState: 'shoot', // hide only while crouched at cover
+      lastSeen: null,
+      lastSeenAge: 99,
+      coverHold: 0,
+      stateHold: 0,
+      patrolIndex: i,
       fireCooldown: Math.random() * 1.5,
       dead: false,
       deadTimer: 0,
@@ -340,24 +380,26 @@ export class BotManager {
       this.cb.onBotDeath?.(bot, deathPos, attackerInfo);
       return { killed: true, headshot };
     }
-    // Player shot us → fight back + prefer cover (not idle patrol)
+    // Player shot us → break contact, sprint to cover, then peek-fire
     if (attackerInfo?.isPlayer) {
       bot.underFire = UNDER_FIRE_TIME;
+      bot.coverHold = 3.8;
+      bot.stateHold = 0.45;
       bot.losTimer = Math.max(bot.losTimer || 0, reactionDelayForRole(bot.role, 6));
-      bot.aimTimer = Math.max(bot.aimTimer || 0, aimWindup() * 0.5);
-      // Break long hide; go for cover then return fire
-      bot.peekState = 'peak';
-      bot.peekTimer = 0.35;
+      bot.aimTimer = Math.max(bot.aimTimer || 0, aimWindup() * 0.35);
+      bot.peekState = 'hide';
+      bot.peekTimer = 0.2;
       const playerPos = this.cb.getPlayerPosition?.();
       if (playerPos) {
-        const cover = this._pickCoverNear(bot, playerPos);
+        const cover = this._pickCoverNear(bot, playerPos) || this._synthesizeCover(bot, playerPos);
         if (cover) {
           bot.coverPoint = cover;
           bot.state = 'cover';
-          bot.target = cover.clone();
+          this._setTarget(bot, cover);
         } else {
           bot.state = 'attack';
-          bot.target = playerPos.clone();
+          bot.peekState = 'shoot';
+          this._setTarget(bot, playerPos);
         }
       }
     }
@@ -395,27 +437,101 @@ export class BotManager {
 
   _pickCoverNear(bot, playerPos) {
     const covers = this.mapData.coverPoints || [];
-    if (!covers.length || !playerPos) return null;
+    if (!playerPos) return null;
+    if (!covers.length) return this._synthesizeCover(bot, playerPos);
+    const ranked = [];
+    const bx = bot.position.x;
+    const bz = bot.position.z;
+    const px = playerPos.x;
+    const pz = playerPos.z;
+    for (let i = 0; i < covers.length; i++) {
+      const c = covers[i];
+      const cx = c.x;
+      const cz = c.z;
+      const toBot = Math.hypot(cx - bx, cz - bz);
+      if (toBot > 40) continue;
+      const toPlayer = Math.hypot(cx - px, cz - pz);
+      if (toPlayer < 2.4 || toPlayer > 42) continue;
+      ranked.push({ i, score: toBot * 0.55 + Math.abs(toPlayer - 8) * 0.35 });
+    }
+    if (!ranked.length) return this._synthesizeCover(bot, playerPos);
+    ranked.sort((a, b) => a.score - b.score);
+    const limit = Math.min(6, ranked.length);
     let best = null;
     let bestScore = Infinity;
-    for (const c of covers) {
-      const p = c.clone ? c.clone() : new THREE.Vector3(c.x, 0, c.z);
-      p.y = 0;
-      const toBot = p.distanceTo(bot.position);
-      const toPlayer = p.distanceTo(playerPos);
-      // Prefer reachable cover with peek distance from player
-      if (toPlayer < 2.8 || toPlayer > 20) continue;
-      if (toBot > 24) continue;
-      // Prefer spots that break LOS to player (true cover)
-      const hasLosFromCover = this._hasLOS(p, playerPos);
-      let score = toBot * 0.55 + Math.abs(toPlayer - 7) * 0.35;
-      if (!hasLosFromCover) score -= 3; // bonus: blocked from player
+    for (let n = 0; n < limit; n++) {
+      const c = covers[ranked[n].i];
+      const p = { x: c.x, y: 0, z: c.z };
+      let score = ranked[n].score;
+      if (!this._hasLOS(p, playerPos)) score -= 3;
       if (score < bestScore) {
         bestScore = score;
-        best = p;
+        if (!best) best = new THREE.Vector3();
+        best.set(c.x, 0, c.z);
       }
     }
-    return best;
+    return best || this._synthesizeCover(bot, playerPos);
+  }
+
+  /** Sidestep + back off when the map has no usable authored cover nearby. */
+  _synthesizeCover(bot, playerPos) {
+    if (!playerPos) return null;
+    const away = this._away.copy(bot.position).sub(playerPos);
+    away.y = 0;
+    if (away.lengthSq() < 0.01) away.set(bot.strafeSign || 1, 0, 0);
+    else away.normalize();
+    const side = this._side.set(-away.z, 0, away.x).multiplyScalar(bot.strafeSign || 1);
+    return new THREE.Vector3(
+      bot.position.x + away.x * 6.2 + side.x * 3.4,
+      0,
+      bot.position.z + away.z * 6.2 + side.z * 3.4
+    );
+  }
+
+  _runCoverBehavior(bot, playerPos, distPlayer, los, dt) {
+    if (
+      !bot.coverPoint ||
+      bot.repathTimer <= 0 ||
+      bot.position.distanceTo(bot.coverPoint) > 28
+    ) {
+      bot.coverPoint = this._pickCoverNear(bot, playerPos) || this._synthesizeCover(bot, playerPos);
+      bot.repathTimer = 2.2 + Math.random() * 1.2;
+    }
+    if (!bot.coverPoint) {
+      bot.state = 'attack';
+      bot.peekState = 'shoot';
+      this._setTarget(bot, playerPos);
+      return;
+    }
+    const dCover = bot.position.distanceTo(bot.coverPoint);
+    if (dCover >= 1.5) {
+      bot.state = 'cover';
+      this._setTarget(bot, bot.coverPoint);
+      bot.hideTime = 0;
+      return;
+    }
+    if (bot.peekState === 'hide') bot.hideTime = (bot.hideTime || 0) + dt;
+    else bot.hideTime = 0;
+    if (bot.hideTime > 0.85 || (los && distPlayer < 9 && bot.peekState === 'hide')) {
+      bot.peekState = 'shoot';
+      bot.peekTimer = 0.9 + Math.random() * 0.4;
+      bot.hideTime = 0;
+    }
+    if (bot.peekTimer <= 0) {
+      if (bot.peekState === 'hide') {
+        bot.peekState = 'peak';
+        bot.peekTimer = 0.3 + Math.random() * 0.2;
+      } else if (bot.peekState === 'peak') {
+        bot.peekState = 'shoot';
+        bot.peekTimer = 0.85 + Math.random() * 0.5;
+      } else {
+        bot.peekState = distPlayer < 8 || bot.underFire < 0.4 ? 'shoot' : 'hide';
+        bot.peekTimer =
+          bot.peekState === 'hide' ? 0.4 + Math.random() * 0.3 : 0.7 + Math.random() * 0.4;
+      }
+    }
+    bot.state = bot.peekState === 'hide' ? 'cover' : 'attack';
+    this._setTarget(bot, bot.peekState === 'hide' ? bot.coverPoint : playerPos);
   }
 
   _flankPoint(bot, playerPos) {
@@ -436,6 +552,7 @@ export class BotManager {
     const playerAlive = this.cb.getPlayerAlive?.() ?? false;
     const hunterIds = this._selectHunters(playerPos, playerAlive);
     const donuts = this.cb.getDonuts?.() || [];
+    this._frame = (this._frame || 0) + 1;
 
     for (const bot of this.bots) {
       if (bot.dead) {
@@ -460,21 +577,41 @@ export class BotManager {
       if (!usingRapier) this._integrateBotVertical(bot, dt);
 
       if (!bot._prevPos) bot._prevPos = bot.position.clone();
-      const preMove = bot.position.clone();
+      const preMove = this._preMove.copy(bot.position);
       if (bot.position.distanceTo(bot.lastPos) < 0.05) bot.stuckTimer += dt;
       else bot.stuckTimer = 0;
       bot.lastPos.copy(bot.position);
 
       const role = bot.roleDef || BOT_ROLES.hunter;
-      const toPlayer = playerAlive && playerPos ? playerPos.clone().sub(bot.position) : null;
+      const toPlayer =
+        playerAlive && playerPos ? this._toPlayer.copy(playerPos).sub(bot.position) : null;
       const distPlayer = toPlayer ? toPlayer.length() : Infinity;
       let los = false;
-      // Always test LOS when player is within full sight (not only role-scaled)
+      // Stagger LOS vs large collider lists — cache ~70–120ms, offset by bot id
       if (toPlayer && distPlayer < SIGHT_RANGE) {
-        los = this._hasLOS(bot.position, playerPos);
+        bot._losRefresh = (bot._losRefresh || 0) - dt;
+        if (bot._losRefresh <= 0) {
+          los = this._hasLOS(bot.position, playerPos);
+          bot._losCached = los;
+          bot._losRefresh = 0.065 + (bot.id % 4) * 0.016;
+        } else {
+          los = !!bot._losCached;
+        }
+      } else {
+        bot._losCached = false;
       }
-      if (los) bot.losTimer = (bot.losTimer || 0) + dt;
-      else bot.losTimer = 0;
+      if (los) {
+        bot.losTimer = (bot.losTimer || 0) + dt;
+        if (!bot.lastSeen) bot.lastSeen = new THREE.Vector3();
+        bot.lastSeen.copy(playerPos);
+        bot.lastSeen.y = 0;
+        bot.lastSeenAge = 0;
+      } else {
+        bot.losTimer = 0;
+        bot.lastSeenAge = (bot.lastSeenAge || 0) + dt;
+      }
+      if (bot.coverHold > 0) bot.coverHold = Math.max(0, bot.coverHold - dt);
+      if (bot.stateHold > 0) bot.stateHold = Math.max(0, bot.stateHold - dt);
 
       // Nearest donut
       let nearestDonut = null;
@@ -506,90 +643,59 @@ export class BotManager {
         !(los && distPlayer < AGGRO_RANGE) &&
         (bot.role === 'scavenger' || !mayHunt || distPlayer > 18);
 
-      // ── State machine: LOSaggro + hunters + cover under fire ───────────
-      if (canSeekDonut) {
+      // ── State machine: sight-fire, last-seen hunt, committed cover ─────
+      const takeCover =
+        (bot.coverHold || 0) > 0 ||
+        (engage && playerPos && (bot.underFire > 0 || bot.role === 'lurker'));
+
+      if (canSeekDonut && (bot.coverHold || 0) <= 0) {
         bot.state = 'seek_donut';
-        bot.target = nearestDonut.clone();
+        this._setTarget(bot, nearestDonut);
         bot.coverPoint = null;
         bot.hideTime = 0;
+        bot.peekState = 'shoot';
+      } else if (takeCover && playerPos) {
+        this._runCoverBehavior(bot, playerPos, distPlayer, los, dt);
       } else if (engage && playerPos) {
-        const wantCover =
-          bot.underFire > 0 ||
-          bot.role === 'lurker' ||
-          (role.preferCover > 0.5 && distPlayer < 14 && Math.random() < 0.015);
-
-        if (wantCover) {
-          if (!bot.coverPoint || bot.repathTimer <= 0 || bot.position.distanceTo(bot.coverPoint) > 20) {
-            bot.coverPoint = this._pickCoverNear(bot, playerPos);
-            bot.repathTimer = 2 + Math.random() * 1.5;
-          }
-        }
-
-        if (bot.coverPoint && (bot.underFire > 1.2 || bot.role === 'lurker')) {
-          const dCover = bot.position.distanceTo(bot.coverPoint);
-          if (dCover >= 1.5) {
-            bot.state = 'cover';
-            bot.target = bot.coverPoint.clone();
-            bot.hideTime = 0;
-          } else {
-            // At cover: peek cycle — never hide forever while player is close
-            if (bot.peekState === 'hide') bot.hideTime = (bot.hideTime || 0) + dt;
-            else bot.hideTime = 0;
-            if (bot.hideTime > 1.1 || (los && distPlayer < 10 && bot.peekState === 'hide')) {
-              bot.peekState = 'shoot';
-              bot.peekTimer = 0.9 + Math.random() * 0.4;
-              bot.hideTime = 0;
-            }
-            if (bot.peekTimer <= 0) {
-              if (bot.peekState === 'hide') {
-                bot.peekState = 'peak';
-                bot.peekTimer = 0.35 + Math.random() * 0.25;
-              } else if (bot.peekState === 'peak') {
-                bot.peekState = 'shoot';
-                bot.peekTimer = 0.85 + Math.random() * 0.5;
-              } else {
-                // Under fire: shorter hide; close range: barely hide
-                bot.peekState = distPlayer < 9 || bot.underFire < 0.5 ? 'shoot' : 'hide';
-                bot.peekTimer =
-                  bot.peekState === 'hide' ? 0.45 + Math.random() * 0.35 : 0.7 + Math.random() * 0.4;
-              }
-            }
-            bot.state = bot.peekState === 'hide' ? 'cover' : 'attack';
-            bot.target =
-              bot.peekState === 'hide' ? bot.coverPoint.clone() : playerPos.clone();
-          }
-        } else if (bot.role === 'flanker' && distPlayer > 8 && bot.underFire <= 0) {
+        bot.peekState = 'shoot';
+        if (bot.role === 'flanker' && distPlayer > 8 && bot.underFire <= 0) {
           bot.state = 'flank';
-          bot.target = this._flankPoint(bot, playerPos) || playerPos.clone();
+          this._setTarget(bot, this._flankPoint(bot, playerPos) || playerPos);
         } else if (los && distPlayer < ATTACK_RANGE * Math.max(1, role.aggression)) {
-          // Direct attack — default when you see the player
           bot.state = 'attack';
-          bot.target = playerPos.clone();
-          if (bot.underFire <= 0) bot.coverPoint = null;
-        } else if (los || mayHunt || bot.underFire > 0) {
-          bot.state = 'chase';
-          bot.target = playerPos.clone();
+          this._setTarget(bot, playerPos);
+          bot.coverPoint = null;
         } else {
           bot.state = 'chase';
-          bot.target = playerPos.clone();
+          const hunt =
+            bot.lastSeen && (bot.lastSeenAge || 0) < 4 ? bot.lastSeen : playerPos;
+          this._setTarget(bot, hunt);
         }
-      } else if (mayHunt && playerPos && distPlayer < SIGHT_RANGE && !los) {
-        // Hunter lost LOS — keep hunting last known
+      } else if (
+        playerPos &&
+        bot.lastSeen &&
+        (bot.lastSeenAge || 0) < 3.8 &&
+        (mayHunt || bot.underFire > 0)
+      ) {
         bot.state = 'chase';
-        bot.target = playerPos.clone();
+        bot.peekState = 'shoot';
+        this._setTarget(bot, bot.lastSeen);
+        if (bot.position.distanceTo(bot.lastSeen) < 1.6 && !los) {
+          bot.lastSeen = null;
+          bot.lastSeenAge = 99;
+        }
       } else {
         bot.state = 'patrol';
         bot.coverPoint = null;
-        bot.peekState = 'hide';
         bot.hideTime = 0;
         if (
           !bot.waypoint ||
           bot.position.distanceTo(bot.waypoint) < 1.2 ||
-          bot.repathTimer <= 0 ||
-          bot.stuckTimer > 1.2
+          bot.stuckTimer > 1.2 ||
+          bot.repathTimer <= 0
         ) {
           bot.waypoint = this._pickWaypoint(bot);
-          bot.repathTimer = 4 + Math.random() * 4;
+          bot.repathTimer = 10 + Math.random() * 5;
           bot.stuckTimer = 0;
         }
         bot.target = bot.waypoint;
@@ -598,9 +704,9 @@ export class BotManager {
       // ── Movement ───────────────────────────────────────────────────────
       let sprinting = false;
       if (bot.target) {
-        const dest = bot.target.clone();
+        const dest = this._dest.copy(bot.target);
         dest.y = 0;
-        const toDest = dest.clone().sub(bot.position);
+        const toDest = this._toDest.copy(dest).sub(bot.position);
         toDest.y = 0;
         let dist = toDest.length();
 
@@ -613,11 +719,11 @@ export class BotManager {
               bot.strafeSign *= -1;
               bot.strafeTimer = 1.2 + Math.random() * 1.8;
             }
-            const away = bot.position.clone().sub(playerPos);
+            const away = this._away.copy(bot.position).sub(playerPos);
             away.y = 0;
             if (away.lengthSq() > 0.01) away.normalize();
             else away.set(1, 0, 0);
-            const side = new THREE.Vector3(-away.z, 0, away.x).multiplyScalar(bot.strafeSign);
+            const side = this._side.set(-away.z, 0, away.x).multiplyScalar(bot.strafeSign);
             if (distPlayer < COMBAT_STOP_DIST * 0.85) {
               toDest.copy(away).addScaledVector(side, 0.35);
               dist = 1;
@@ -637,12 +743,12 @@ export class BotManager {
 
         const hasMoveIntent = wantMove && dist > 0.2;
         if (hasMoveIntent || Math.hypot(bot.velocity.x, bot.velocity.z) > BOT_STEER_EPSILON) {
-          const dir = hasMoveIntent
-            ? toDest.normalize()
-            : bot.velocity.clone().setY(0).normalize();
+          const dir = this._dir;
+          if (hasMoveIntent) dir.copy(toDest).normalize();
+          else dir.copy(bot.velocity).setY(0).normalize();
           for (const other of this.bots) {
             if (other === bot || other.dead) continue;
-            const away = bot.position.clone().sub(other.position);
+            const away = this._away.copy(bot.position).sub(other.position);
             const d = away.length();
             if (d < 1.6 && d > 0.01) {
               away.y = 0;
@@ -651,7 +757,7 @@ export class BotManager {
             }
           }
           if (playerPos) {
-            const awayP = bot.position.clone().sub(playerPos);
+            const awayP = this._awayP.copy(bot.position).sub(playerPos);
             awayP.y = 0;
             const dp = awayP.length();
             if (dp < PLAYER_MIN_DIST + 0.4 && dp > 0.01) {
@@ -663,7 +769,9 @@ export class BotManager {
           }
           if (dir.lengthSq() > 0) dir.normalize();
 
-          sprinting = hasMoveIntent && (bot.state === 'chase' || bot.state === 'flank');
+          sprinting =
+            hasMoveIntent &&
+            (bot.state === 'chase' || bot.state === 'flank' || bot.state === 'cover');
           const speedMul = getBotDifficulty().speedMul || 1;
           const speed = !hasMoveIntent
             ? 0
@@ -683,7 +791,7 @@ export class BotManager {
           } else if (bot.vaulting && !bot.grounded) {
             // Mid-vault: keep driving forward through/over the fence (ignore low jumpables)
             bot.velocity.set(bot.airMoveX || 0, 0, bot.airMoveZ || 0);
-            const air = bot.position.clone();
+            const air = this._air.copy(bot.position);
             air.x += bot.velocity.x * dt;
             air.z += bot.velocity.z * dt;
             if (!this._blockedVault(air, bot) && !this._moveBlockedVault(bot.position, air, bot)) {
@@ -691,7 +799,7 @@ export class BotManager {
               bot.position.z = air.z;
             }
           } else {
-            const next = bot.position.clone().add(move);
+            const next = this._next.copy(bot.position).add(move);
             // Bots must open closed house doors themselves — never phase through
             this._tryOpenDoorForMove(bot.position, next);
             if (!this._blocked(next, bot) && !botMoveBlocked(bot.position, next, this.mapData.colliders || [])) {
@@ -702,7 +810,7 @@ export class BotManager {
                 bot.stuckTimer > 0.18 && this._tryBotJumpOver(bot, move);
               if (!jumped) {
                 this.cb.doors?.requestOpenNear?.(bot.position);
-                const onlyX = bot.position.clone();
+                const onlyX = this._onlyX.copy(bot.position);
                 onlyX.x += move.x;
                 this._tryOpenDoorForMove(bot.position, onlyX);
                 if (
@@ -711,7 +819,7 @@ export class BotManager {
                 ) {
                   bot.position.x = onlyX.x;
                 }
-                const onlyZ = bot.position.clone();
+                const onlyZ = this._onlyZ.copy(bot.position);
                 onlyZ.z += move.z;
                 this._tryOpenDoorForMove(bot.position, onlyZ);
                 if (
@@ -731,17 +839,18 @@ export class BotManager {
         }
       }
 
+      const hidingAtCover = bot.state === 'cover' && bot.peekState === 'hide';
       const combatFacing =
         playerPos &&
+        !hidingAtCover &&
         (bot.state === 'attack' ||
           ((bot.state === 'chase' || bot.state === 'flank' || bot.state === 'cover') &&
             los &&
             playerAlive &&
             !bot.reloading &&
-            bot.peekState !== 'hide' &&
             distPlayer < ATTACK_RANGE + 4));
       if (combatFacing) {
-        const d = playerPos.clone().sub(bot.position);
+        const d = this._tmp.copy(playerPos).sub(bot.position);
         bot.yawTarget = Math.atan2(-d.x, -d.z);
       } else if (Math.hypot(bot.velocity.x, bot.velocity.z) > BOT_STEER_EPSILON) {
         bot.yawTarget = Math.atan2(-bot.velocity.x, -bot.velocity.z);
@@ -758,12 +867,12 @@ export class BotManager {
 
       // Player separation — destination free is NOT enough; path must not tunnel walls
       if (playerPos) {
-        const from = bot.position.clone();
+        const from = this._from.copy(bot.position);
         const dx = from.x - playerPos.x;
         const dz = from.z - playerPos.z;
         const d = Math.hypot(dx, dz);
         if (d < PLAYER_MIN_DIST) {
-          const tryPos = from.clone();
+          const tryPos = this._next.copy(from);
           if (d < 1e-4) {
             tryPos.x += PLAYER_MIN_DIST;
           } else {
@@ -808,7 +917,7 @@ export class BotManager {
         }
       }
 
-      // Aim + shoot whenever engaged with LOS (not only hunter slot)
+      // Aim + shoot on LOS. Hide only blocks fire while crouched at cover.
       const inFightState =
         bot.state === 'attack' ||
         bot.state === 'chase' ||
@@ -819,7 +928,7 @@ export class BotManager {
         los &&
         playerAlive &&
         !bot.reloading &&
-        bot.peekState !== 'hide' &&
+        !hidingAtCover &&
         distPlayer < ATTACK_RANGE + 4;
       const reactOk =
         (bot.losTimer || 0) >= reactionDelayForRole(bot.role, distPlayer) || bot.underFire > 0;
@@ -850,16 +959,17 @@ export class BotManager {
         ? 1 - Math.max(0, bot.reloadTimer) / (bot.reloadDuration || 1.35)
         : 0;
       const animSpeed = bot.moveSpeed;
-      bot.character.updateAnimation(dt, {
-        moving: bot.moveSpeed > 0.35,
-        sprinting: bot.moveSpeed > BOT_SPEED * 1.05,
-        moveSpeed: animSpeed,
-        grounded: !!bot.grounded,
-        dead: false,
-        aiming,
-        reloading: bot.reloading,
-        reloadT,
-      });
+      const anim = this._anim;
+      anim.moving = bot.moveSpeed > 0.35;
+      anim.sprinting = bot.moveSpeed > BOT_SPEED * 1.05;
+      anim.moveSpeed = animSpeed;
+      anim.grounded = !!bot.grounded;
+      anim.dead = false;
+      anim.aiming = aiming;
+      anim.reloading = bot.reloading;
+      anim.reloadT = reloadT;
+      const skipAnim = distPlayer > 28 && ((bot.id + this._frame) & 1);
+      if (!skipAnim) bot.character.updateAnimation(dt, anim);
 
       // Shoot after anim so pose is up; triggerFire then snaps aim for the flash frame
       if (wantsAim && aimReady) {
@@ -868,16 +978,10 @@ export class BotManager {
         } else if (bot.fireCooldown <= 0) {
           this._botShoot(bot, playerPos, distPlayer);
           // Re-apply anim once so arm kick is visible immediately this frame
-          bot.character.updateAnimation(0, {
-            moving: bot.moveSpeed > 0.35,
-            sprinting: bot.moveSpeed > BOT_SPEED * 1.05,
-            moveSpeed: animSpeed,
-            grounded: !!bot.grounded,
-            dead: false,
-            aiming: true,
-            reloading: false,
-            reloadT: 0,
-          });
+          anim.aiming = true;
+          anim.reloading = false;
+          anim.reloadT = 0;
+          bot.character.updateAnimation(0, anim);
         }
       }
 
@@ -1082,13 +1186,13 @@ export class BotManager {
         );
         bot.stuckTimer = 0;
         bot.waypoint = this._pickWaypoint(bot);
-        bot.coverPoint = null;
+        if ((bot.coverHold || 0) <= 0) bot.coverPoint = null;
         bot.strafeSign *= -1;
         return;
       }
     }
     bot.waypoint = this._pickWaypoint(bot);
-    bot.coverPoint = null;
+    if ((bot.coverHold || 0) <= 0) bot.coverPoint = null;
     bot.strafeSign *= -1;
   }
 
@@ -1239,7 +1343,7 @@ export class BotManager {
         bot.position.z = tryPos.z;
         bot.stuckTimer = 0;
         bot.waypoint = this._pickWaypoint(bot);
-        bot.coverPoint = null;
+        if ((bot.coverHold || 0) <= 0) bot.coverPoint = null;
         bot.strafeSign *= -1;
         bot.strafeTimer = 1 + Math.random();
         return;
@@ -1250,31 +1354,32 @@ export class BotManager {
       if (this._tryBotJumpOver(bot, move)) return;
     }
     bot.waypoint = this._pickWaypoint(bot);
-    bot.coverPoint = null;
+    if ((bot.coverHold || 0) <= 0) bot.coverPoint = null;
     bot.stuckTimer = 0;
     bot.strafeSign *= -1;
   }
 
   _pickWaypoint(bot) {
-    const pts = [
-      ...(this.mapData.waypoints || []),
-      ...(this.mapData.coverPoints || []),
-      ...(this.mapData.spawnPoints || []),
-    ];
+    const authored = this.mapData.waypoints || [];
+    const pts = authored.length
+      ? authored
+      : [...(this.mapData.coverPoints || []), ...(this.mapData.spawnPoints || [])];
     if (!pts.length) {
       return new THREE.Vector3((Math.random() - 0.5) * 30, 0, (Math.random() - 0.5) * 30);
     }
-    let best = pts[Math.floor(Math.random() * pts.length)].clone();
-    for (let i = 0; i < 5; i++) {
-      const p = pts[Math.floor(Math.random() * pts.length)].clone();
-      const d = p.distanceTo(bot.position);
-      if (d > 4 && d < 25) {
-        best = p;
-        break;
+    const n = pts.length;
+    const start = ((bot.patrolIndex || 0) + 1) % n;
+    for (let i = 0; i < n; i++) {
+      const p = pts[(start + i) % n];
+      const d = Math.hypot(p.x - bot.position.x, p.z - bot.position.z);
+      if (d > 5) {
+        bot.patrolIndex = (start + i) % n;
+        return new THREE.Vector3(p.x, 0, p.z);
       }
     }
-    best.y = 0;
-    return best;
+    bot.patrolIndex = start;
+    const p = pts[start];
+    return new THREE.Vector3(p.x, 0, p.z);
   }
 
   /**
@@ -1298,12 +1403,9 @@ export class BotManager {
 
   _hasLOS(from, to) {
     if (!from || !to) return false;
-    const origin = from.clone();
-    origin.y = 1.4;
-    const target = to.clone();
-    target.y = 1.4;
-    if (origin.distanceTo(target) < 0.5) return true;
-    // Shared hitscan filter — same solids as player shots (window gaps open)
+    const origin = this._losFrom.set(from.x, 1.4, from.z);
+    const target = this._losTo.set(to.x, 1.4, to.z);
+    if (origin.distanceToSquared(target) < 0.25) return true;
     return !rayBlockedBySolids(origin, target, this.mapData.colliders || [], {
       minHeight: 0.5,
       tMin: 0.08,
@@ -1327,9 +1429,14 @@ export class BotManager {
     bot.state = 'patrol';
     bot.waypoint = null;
     bot.coverPoint = null;
-    bot.peekState = 'hide';
+    bot.peekState = 'shoot';
     bot.losTimer = 0;
     bot.underFire = 0;
+    bot.coverHold = 0;
+    bot.stateHold = 0;
+    bot.lastSeen = null;
+    bot.lastSeenAge = 99;
+    bot._losCached = false;
     bot.hideTime = 0;
     bot.velY = 0;
     bot.velocity.set(0, 0, 0);

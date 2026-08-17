@@ -3,7 +3,7 @@
  */
 import * as THREE from 'three';
 import { SWEET_CO, SUGAR_WORKS, buildingAabb } from './layout.js';
-import { rbox, box, addAabb, addFloor, addSwingDoor } from './helpers.js';
+import { rbox, box, addAabb, addFloor, addSwingDoor, trackLight } from './helpers.js';
 
 const WALL_INFLATE = 0.45;
 const L1_WALK = 0.25;
@@ -883,7 +883,7 @@ function placeDecor(interior, name, lx, y, lz, w, h, d, color, opts = {}) {
   return mesh;
 }
 
-function addLamp(interior, x, y, z, color) {
+function addLamp(ctx, interior, x, y, z, color) {
   placeDecor(interior, 'lamp_pole', x, y - 0.55, z, 0.08, 1.15, 0.08, 0xe8dcc8);
   placeDecor(interior, 'lamp_shade', x, y + 0.12, z, 0.42, 0.24, 0.42, color, {
     emissive: color,
@@ -893,6 +893,7 @@ function addLamp(interior, x, y, z, color) {
   const light = new THREE.PointLight(color, 22, 14, 2);
   light.position.set(x, y, z);
   interior.add(light);
+  trackLight(ctx, light, 10);
 }
 
 function dressSweetCo(ctx, house, spec, L2y, frontZ) {
@@ -924,8 +925,8 @@ function dressSweetCo(ctx, house, spec, L2y, frontZ) {
   placeSolid(ctx, interior, spec, 'shelf_pack', -11.22, 0.95, 2.4, 0.42, 1.7, 2.4, wood, { kind: 'wood' });
   placeDecor(interior, 'jar_a', -11.22, 1.55, 1.7, 0.18, 0.22, 0.18, berry);
   placeDecor(interior, 'jar_b', -11.22, 1.52, 2.3, 0.16, 0.2, 0.16, 0xffe066);
-  addLamp(interior, 4.6, 1.85, 7.4, 0xffe8c8);
-  addLamp(interior, -4.2, 1.85, -3.2, 0xffd0e0);
+  addLamp(ctx, interior, 4.6, 1.85, 7.4, 0xffe8c8);
+  addLamp(ctx, interior, -4.2, 1.85, -3.2, 0xffd0e0);
   placeDecor(interior, 'sign_sweet', 0, 2.9, frontZ - 0.28, 3.4, 0.55, 0.08, berry);
   placeDecor(interior, 'art_recept', 8.6, 1.65, 8.8, 0.08, 0.7, 1.1, 0xff8fab);
 
@@ -941,8 +942,8 @@ function dressSweetCo(ctx, house, spec, L2y, frontZ) {
   placeDecor(interior, 'beaker_b', -4.6, L2y + 1.02, -6.2, 0.14, 0.22, 0.14, 0x7ee8d4);
   placeSolid(ctx, interior, spec, 'lab_stool', -5.25, L2y + 0.38, -5.15, 0.4, 0.5, 0.4, 0xc5b4e3);
   placeSolid(ctx, interior, spec, 'lab_cabinet', -5.85, L2y + 0.75, -8.65, 1.5, 1.2, 0.5, 0xffd0dc);
-  addLamp(interior, 5.4, L2y + 1.7, 6.2, 0xfff0d0);
-  addLamp(interior, -4.8, L2y + 1.7, -4.8, 0xffe0f0);
+  addLamp(ctx, interior, 5.4, L2y + 1.7, 6.2, 0xfff0d0);
+  addLamp(ctx, interior, -4.8, L2y + 1.7, -4.8, 0xffe0f0);
   placeDecor(interior, 'overlook_plant', -0.35, L2y + 0.35, 6.4, 0.32, 0.4, 0.32, wood, { kind: 'wood' });
   placeDecor(interior, 'overlook_leaf', -0.35, L2y + 0.7, 6.4, 0.45, 0.35, 0.45, 0x6ee7b7);
   placeDecor(interior, 'wainscot_back', 0, 0.55, -spec.d / 2 + 0.22, spec.w - 1.4, 0.12, 0.06, berry);
@@ -980,8 +981,8 @@ function dressSugarWorks(ctx, house, spec, L2y, frontZ) {
   placeSolid(ctx, interior, spec, 'conveyor', 3.55, 0.42, 4.25, 2.6, 0.62, 0.7, 0xd0d6de);
   placeDecor(interior, 'conveyor_box_a', 2.7, 0.85, 4.25, 0.4, 0.28, 0.4, 0xffe066);
   placeDecor(interior, 'conveyor_box_b', 4.2, 0.85, 4.25, 0.4, 0.28, 0.4, mint);
-  addLamp(interior, 1.2, 1.9, -2.0, 0xfff6d8);
-  addLamp(interior, -6.4, 1.9, -5.2, 0xe8fff4);
+  addLamp(ctx, interior, 1.2, 1.9, -2.0, 0xfff6d8);
+  addLamp(ctx, interior, -6.4, 1.9, -5.2, 0xe8fff4);
   placeDecor(interior, 'sign_sugar', 0, 2.9, frontZ + 0.28, 3.8, 0.55, 0.08, mint);
   placeDecor(interior, 'poster', -9.7, 1.6, 1.4, 0.08, 0.7, 1.0, 0x7ee8d4);
 
@@ -1000,8 +1001,8 @@ function dressSugarWorks(ctx, house, spec, L2y, frontZ) {
   placeSolid(ctx, interior, spec, 'meet_chair_a', 4.35, L2y + 0.38, -4.15, 0.4, 0.5, 0.4, mint);
   placeSolid(ctx, interior, spec, 'meet_chair_b', 4.35, L2y + 0.38, -6.25, 0.4, 0.5, 0.4, mint);
   placeSolid(ctx, interior, spec, 'file_cab', 9.55, L2y + 0.7, 7.15, 0.55, 1.15, 0.9, 0xe8f0d8);
-  addLamp(interior, -6.0, L2y + 1.7, -5.2, 0xf0fff8);
-  addLamp(interior, 5.6, L2y + 1.7, 6.4, 0xfff0d0);
+  addLamp(ctx, interior, -6.0, L2y + 1.7, -5.2, 0xf0fff8);
+  addLamp(ctx, interior, 5.6, L2y + 1.7, 6.4, 0xfff0d0);
   placeDecor(interior, 'wainscot_back', 0, 0.55, spec.d / 2 - 0.22, spec.w - 1.4, 0.12, 0.06, mint);
   placeDecor(interior, 'wainscot_load', -spec.w / 2 + 0.22, 0.55, 0.2, 0.06, 0.12, spec.d - 3.4, 0xa8f0dc);
   placeDecor(interior, 'mint_bowl', 2.55, 1.0, -1.85, 0.26, 0.12, 0.26, mint);

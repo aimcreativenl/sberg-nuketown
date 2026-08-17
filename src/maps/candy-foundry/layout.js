@@ -46,6 +46,49 @@ export const TASTING_KIOSK = {
   facade: 0xffd0dc,
 };
 
+/** Cupcake booth — enterable, north-west dry yard. */
+export const CUPCAKE_KIOSK = {
+  id: 'cupcake_kiosk',
+  cx: -36,
+  cz: 34,
+  w: 10,
+  d: 8,
+  wallT: 0.4,
+  height: 3.85,
+  accent: 0xff8fab,
+  facade: 0xfff4dc,
+};
+
+/** Voxel gummy-bear cover in the empty south-west hangar floor. */
+export const GUMMY_BEARS = [
+  { x: -32, z: -32, color: 0xff4d6d, s: 1 },
+  { x: -24, z: -36, color: 0xffe066, s: 1.06 },
+  { x: -17, z: -27, color: 0x5edc78, s: 0.94 },
+];
+
+/** Soft-serve swirl tower with walkable spiral stairs. */
+export const SOFT_SERVE = {
+  id: 'soft_serve_tower',
+  cx: -30,
+  cz: 22,
+  deckY: 3.85,
+  radius: 2.55,
+};
+
+/** Elevated gift gantry over the empty SW floor. Stand-to-ride + visual boxes. */
+export const GIFT_GANTRY = {
+  id: 'gift_gantry',
+  x0: -40,
+  x1: -16,
+  z: -30.2,
+  width: 2.25,
+  y: 2.35,
+  speed: 2.6,
+  dirX: 1,
+  dirZ: 0,
+  boxCount: 4,
+};
+
 /** Factory conveyor in front of the kiosk. Boxes travel +X. Stand-to-ride. */
 export const CONVEYOR = {
   id: 'candy_line',

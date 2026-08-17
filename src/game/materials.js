@@ -208,6 +208,21 @@ export function makeProcTexture(kind = 'noise', size = 64, opts = {}) {
  * @param {number|string} color
  * @param {object} opts roughness, metalness, map, mapKind, emissive, emissiveIntensity, flatShading, transparent, opacity, name
  */
+const matCache = new Map();
+const boxGeoCache = new Map();
+
+/** Shared box geometry keyed by size. Do not dispose per mesh. */
+export function boxGeometry(w, h, d) {
+  const key = `${w.toFixed(4)}_${h.toFixed(4)}_${d.toFixed(4)}`;
+  let g = boxGeoCache.get(key);
+  if (!g) {
+    g = new THREE.BoxGeometry(w, h, d);
+    g.userData.shared = true;
+    boxGeoCache.set(key, g);
+  }
+  return g;
+}
+
 export function createMat(color, opts = {}) {
   const {
     roughness = 0.78,
@@ -221,7 +236,15 @@ export function createMat(color, opts = {}) {
     opacity = 1,
     name = 'pastel_std',
     map = null,
+    cache = true,
   } = opts;
+
+  const customMap = !!map;
+  const key =
+    !cache || customMap
+      ? null
+      : `${color}|${roughness}|${metalness}|${mapKind}|${mapRepeat}|${emissive}|${emissiveIntensity}|${flatShading}|${transparent}|${opacity}`;
+  if (key && matCache.has(key)) return matCache.get(key);
 
   let tex = map;
   if (!tex && mapKind) {
@@ -241,6 +264,8 @@ export function createMat(color, opts = {}) {
   });
   mat.name = name;
   mat.userFriendly = true;
+  mat.userData.shared = !customMap;
+  if (key) matCache.set(key, mat);
   return mat;
 }
 
@@ -248,7 +273,11 @@ export function createMat(color, opts = {}) {
  * See-through window glass — must stay highly transparent so outdoor is readable.
  * MeshBasic + depthWrite false avoids opaque grey from lit MeshStandard + emissive.
  */
+const glassCache = new Map();
+
 export function createGlassMat(color = PASTEL.window) {
+  const gkey = String(color);
+  if (glassCache.has(gkey)) return glassCache.get(gkey);
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0xb8e0f5,
     metalness: 0,
@@ -267,7 +296,7 @@ export function createGlassMat(color = PASTEL.window) {
   mat.name = 'glass';
   // Fallback for environments that struggle with transmission: still mostly clear
   if (mat.transmission === undefined) {
-    return new THREE.MeshBasicMaterial({
+    const fallback = new THREE.MeshBasicMaterial({
       color: 0xc5e8f8,
       transparent: true,
       opacity: 0.2,
@@ -275,7 +304,12 @@ export function createGlassMat(color = PASTEL.window) {
       side: THREE.DoubleSide,
       name: 'glass',
     });
+    fallback.userData.shared = true;
+    glassCache.set(gkey, fallback);
+    return fallback;
   }
+  mat.userData.shared = true;
+  glassCache.set(gkey, mat);
   return mat;
 }
 

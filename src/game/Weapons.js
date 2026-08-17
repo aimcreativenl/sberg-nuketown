@@ -362,6 +362,7 @@ export class WeaponController {
     // frame edge while the grip stays on-screen. −Z is camera-forward.
     this.hipPos = new THREE.Vector3(0.22, -0.13, -0.36);
     this.adsPos = new THREE.Vector3(0.0, -0.12, -0.26);
+    this._targetPos = new THREE.Vector3();
     this.hipRot = new THREE.Euler(0.04, 0.06, 0.03);
     this.viewScale = 1.32;
     this.baseFov = 75;
@@ -694,7 +695,7 @@ export class WeaponController {
     this.kickPitch = THREE.MathUtils.lerp(this.kickPitch, 0, 1 - Math.pow(0.00015, dt));
     this.kickYaw = THREE.MathUtils.lerp(this.kickYaw, 0, 1 - Math.pow(0.00015, dt));
 
-    const targetPos = this.hipPos.clone().lerp(this.adsPos, this.adsBlend);
+    const targetPos = this._targetPos.copy(this.hipPos).lerp(this.adsPos, this.adsBlend);
     // ADS: keep punch, but don't lift the sights off the crosshair
     targetPos.x += swayX + walkBobX + this.punchPos.x * aimMul;
     targetPos.y += this.recoil * 0.08 * aimMul + swayY + walkBobY + this.punchPos.y * aimMul;

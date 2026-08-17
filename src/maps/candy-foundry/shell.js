@@ -3,7 +3,8 @@
  * Do not place buildings, bridges, or furniture — those are buildings.js / yard.js.
  */
 import * as THREE from 'three';
-import { PASTEL } from '../../game/materials.js';
+import { PASTEL, createMat } from '../../game/materials.js';
+import { roundedBoxGeo } from '../../game/softGeo.js';
 import {
   CANDY_CEILING,
   CANDY_GROUND,
@@ -11,7 +12,7 @@ import {
   CANALS,
   FOUNTAIN,
 } from './layout.js';
-import { addAabb, addFloor, box, rbox } from './helpers.js';
+import { addAabb, addFloor, box, rbox, trackLight } from './helpers.js';
 import { createSyrupFlow } from './syrupFlow.js';
 
 const WALL_COL = PASTEL.wall;
@@ -284,32 +285,43 @@ function addCandyCaneLine(group, x0, z0, x1, z1, y, name) {
   const actual = len / n;
   const ux = dx / len;
   const uz = dz / len;
+  const alongX = Math.abs(dx) >= Math.abs(dz);
+  const gw = alongX ? actual * 0.9 : 0.26;
+  const gd = alongX ? 0.26 : actual * 0.9;
+  const geo = roundedBoxGeo(gw, 0.2, gd, 0.06, 2);
+  const dummy = new THREE.Object3D();
+  const pinkPos = [];
+  const creamPos = [];
   for (let i = 0; i < n; i++) {
     const t = (i + 0.5) * actual;
-    const pink = i % 2 === 0;
-    const col = pink ? PASTEL.pink : PASTEL.cream;
-    const alongX = Math.abs(dx) >= Math.abs(dz);
-    const mesh = rbox(
-      alongX ? actual * 0.9 : 0.26,
-      0.2,
-      alongX ? 0.26 : actual * 0.9,
-      col,
-      x0 + ux * t,
-      y,
-      z0 + uz * t,
-      {
-        emissive: col,
-        emissiveIntensity: 0.55,
-        roughness: 0.42,
-        name: i === 0 ? name : undefined,
-        radius: 0.06,
-      }
-    );
-    group.add(mesh);
+    (i % 2 === 0 ? pinkPos : creamPos).push(x0 + ux * t, z0 + uz * t);
   }
+  const stamp = (positions, color, meshName) => {
+    const count = positions.length / 2;
+    if (!count) return;
+    const mesh = new THREE.InstancedMesh(
+      geo,
+      createMat(color, { emissive: color, emissiveIntensity: 0.55, roughness: 0.42 }),
+      count
+    );
+    mesh.name = meshName;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = true;
+    for (let i = 0; i < count; i++) {
+      dummy.position.set(positions[i * 2], y, positions[i * 2 + 1]);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    group.add(mesh);
+  };
+  stamp(pinkPos, PASTEL.pink, name);
+  stamp(creamPos, PASTEL.cream, `${name}_cream`);
 }
 
-function addInteriorLights(group) {
+function addInteriorLights(ctx) {
+  const { group } = ctx;
   // Three r185 PointLight intensity is candela — 0.4 reads as unlit in a 160m hangar.
   const spots = [
     { x: 0, z: 0, color: 0xffe8d0, intensity: 70, dist: 78 },
@@ -326,6 +338,7 @@ function addInteriorLights(group) {
     light.position.set(s.x, 8.6, s.z);
     light.name = `candy_light_${s.x}_${s.z}`;
     group.add(light);
+    trackLight(ctx, light, 16);
   }
 
   const inner = CANDY_MAP_WALL - 1.05;
@@ -440,6 +453,6 @@ export function buildShell(ctx) {
     group.add(rbox(beamSpan, 0.5, 1.05, PASTEL.peach, 0, beamY - 0.08, z, { radius: 0.1, name: `candy_beam_z_${z}` }));
   }
 
-  addInteriorLights(group);
+  addInteriorLights(ctx);
   addOuterRingWaypoints(waypoints);
 }

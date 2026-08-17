@@ -13,6 +13,10 @@ import {
   SUGAR_WORKS,
   SWEET_CO,
   TASTING_KIOSK,
+  CUPCAKE_KIOSK,
+  GUMMY_BEARS,
+  SOFT_SERVE,
+  GIFT_GANTRY,
   buildingAabb,
 } from './layout.js';
 import { addAabb, addFloor, box, rbox, resolveMat } from './helpers.js';
@@ -27,7 +31,8 @@ const GUMDROP_PALETTE = [0xff8fab, 0x7ee8d4, 0xffe066, 0xc9a0e8, 0xffc9a8, 0x7ec
 const SWEET_AABB = buildingAabb(SWEET_CO);
 const SUGAR_AABB = buildingAabb(SUGAR_WORKS);
 const KIOSK_AABB = buildingAabb(TASTING_KIOSK);
-const BUILDING_AABBS = [SWEET_AABB, SUGAR_AABB, KIOSK_AABB];
+const CUPCAKE_AABB = buildingAabb(CUPCAKE_KIOSK);
+const BUILDING_AABBS = [SWEET_AABB, SUGAR_AABB, KIOSK_AABB, CUPCAKE_AABB];
 
 const STAIR_RISE = 0.42;
 const STAIR_RUN = 0.58;
@@ -55,6 +60,13 @@ function inBuilding(x, z, margin = 1.6) {
     if (x >= a.minX - margin && x <= a.maxX + margin && z >= a.minZ - margin && z <= a.maxZ + margin) {
       return true;
     }
+  }
+  if (Math.hypot(x - SOFT_SERVE.cx, z - SOFT_SERVE.cz) < SOFT_SERVE.radius + 2.2 + margin) return true;
+  if (x >= GIFT_GANTRY.x0 - 3.5 - margin && x <= GIFT_GANTRY.x1 + 3.5 + margin) {
+    if (Math.abs(z - GIFT_GANTRY.z) < GIFT_GANTRY.width / 2 + 1.4 + margin) return true;
+  }
+  for (const b of GUMMY_BEARS) {
+    if (Math.hypot(x - b.x, z - b.z) < 2.1 + margin) return true;
   }
   return false;
 }

@@ -36,6 +36,14 @@ export class Player {
     this.mapBounds = mapData?.bounds ?? 38;
     this.position = new THREE.Vector3(0, PLAYER_HEIGHT, 8);
     this.velocity = new THREE.Vector3();
+    this._fwd = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._look = new THREE.Vector3();
+    this._up = new THREE.Vector3(0, 1, 0);
+    this._wish = new THREE.Vector3();
+    this._next = new THREE.Vector3();
+    this._euler = new THREE.Euler(0, 0, 0, 'YXZ');
+    this._moveState = { moving: false, sprinting: false, grounded: true };
     this.yaw = 0;
     this.pitch = 0;
     this.health = PLAYER_MAX_HP;
@@ -265,17 +273,16 @@ export class Player {
   }
 
   get forward() {
-    const f = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    return f.normalize();
+    return this._fwd.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
   }
 
   get right() {
-    return new THREE.Vector3().crossVectors(this.forward, new THREE.Vector3(0, 1, 0)).normalize();
+    return this._right.crossVectors(this.forward, this._up).normalize();
   }
 
   get lookDirection() {
-    const e = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');
-    return new THREE.Vector3(0, 0, -1).applyEuler(e).normalize();
+    this._euler.set(this.pitch, this.yaw, 0, 'YXZ');
+    return this._look.set(0, 0, -1).applyEuler(this._euler).normalize();
   }
 
   /** Player XZ clamp from mapData.bounds (Nuketown 38). */
@@ -307,7 +314,10 @@ export class Player {
   update(dt, colliders, floors, agents = []) {
     if (!this.alive) {
       this.camera.position.copy(this.position);
-      return { moving: false, sprinting: false, grounded: this.grounded };
+      this._moveState.moving = false;
+      this._moveState.sprinting = false;
+      this._moveState.grounded = this.grounded;
+      return this._moveState;
     }
 
     // Phase 1c: Rapier capsule + character controller path (falls back to the
@@ -338,7 +348,7 @@ export class Player {
     let wishX = 0;
     let wishZ = 0;
     if (moving) {
-      const wish = new THREE.Vector3();
+      const wish = this._wish.set(0, 0, 0);
       wish.addScaledVector(this.forward, -mz);
       wish.addScaledVector(this.right, mx);
       wish.y = 0;
@@ -432,7 +442,7 @@ export class Player {
     // Jump: grounded or brief coyote window (first Space) — edge only so hold-Space doesn't re-jump
     const jumpEdge = (this.grounded || this.coyote > 0) && spaceEdge;
     const prevFeet = this.position.y - this.height;
-    const next = this.position.clone();
+    const next = this._next.copy(this.position);
 
     if (usingRapier) {
       if (jumpEdge) {
@@ -634,7 +644,10 @@ export class Player {
     this.position.copy(next);
     this.camera.position.copy(this.position);
 
-    return { moving, sprinting: sprint && moving, grounded: this.grounded };
+    this._moveState.moving = moving;
+    this._moveState.sprinting = sprint && moving;
+    this._moveState.grounded = this.grounded;
+    return this._moveState;
   }
 
   /**

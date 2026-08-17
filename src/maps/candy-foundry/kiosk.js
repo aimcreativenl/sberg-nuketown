@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import { TASTING_KIOSK, buildingAabb } from './layout.js';
-import { addAabb, addFloor, addSwingDoor, box, rbox } from './helpers.js';
+import { addAabb, addFloor, addSwingDoor, box, rbox, trackLight } from './helpers.js';
 
 const DOOR_W = 1.86;
 const DOOR_TOP = 2.35;
@@ -247,6 +247,7 @@ export function buildTastingKiosk(ctx) {
   const lamp = new THREE.PointLight(0xffe8c8, 22, 12, 2);
   lamp.position.set(0.2, 2.15, 0.2);
   interior.add(lamp);
+  trackLight(ctx, lamp, 10);
   interior.add(rbox(0.4, 0.22, 0.4, 0xfff0d0, 0.2, 2.05, 0.2, { emissive: 0xffe8c8, emissiveIntensity: 0.3 }));
   house.add(interior);
 

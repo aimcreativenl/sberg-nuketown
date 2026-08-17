@@ -2,7 +2,7 @@
  * Shared voxel builders for Candy Foundry. Do not import MapBuilder.js.
  */
 import * as THREE from 'three';
-import { createMat, createWoodMat, createGlassMat, createCeilingMat } from '../../game/materials.js';
+import { createMat, createWoodMat, createGlassMat, createCeilingMat, boxGeometry } from '../../game/materials.js';
 import { roundedBoxGeo } from '../../game/softGeo.js';
 import { makeAabbCollider } from '../../game/collision.js';
 
@@ -15,7 +15,7 @@ export function resolveMat(color, opts = {}) {
 }
 
 export function box(w, h, d, color, x, y, z, opts = {}) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), resolveMat(color, opts));
+  const mesh = new THREE.Mesh(boxGeometry(w, h, d), resolveMat(color, opts));
   mesh.position.set(x, y, z);
   mesh.castShadow = opts.castShadow !== false;
   mesh.receiveShadow = opts.receiveShadow !== false;
@@ -39,6 +39,57 @@ export function addFloor(floors, minX, maxX, minZ, maxZ, y) {
 
 export function addAabb(colliders, x, y, z, w, h, d, meta = {}) {
   colliders.push(makeAabbCollider(x, y, z, w, h, d, { solid: true, ...meta }));
+}
+
+const STAIR_RISE = 0.42;
+const STAIR_RUN = 0.58;
+
+/**
+ * Axis-aligned stair flight. Highest tread sits at (landX, landZ, deckY).
+ * `sign` is the ascent direction along `axis` (foot is opposite).
+ */
+export function addAxisStairs(ctx, parent, { name, axis, sign, landX, landZ, width, deckY, color = 0x8a5a32 }) {
+  const steps = Math.max(2, Math.ceil(deckY / STAIR_RISE));
+  const rise = deckY / steps;
+  const treadH = Math.max(0.36, rise + 0.16);
+  const g = new THREE.Group();
+  g.name = name;
+  parent.add(g);
+
+  let footX = landX;
+  let footZ = landZ;
+  for (let i = 0; i < steps; i++) {
+    const topY = (i + 1) * rise;
+    const distFromTop = (steps - 1 - i) * STAIR_RUN;
+    const x = axis === 'x' ? landX - sign * distFromTop : landX;
+    const z = axis === 'z' ? landZ - sign * distFromTop : landZ;
+    if (i === 0) {
+      footX = x;
+      footZ = z;
+    }
+    const tw = axis === 'x' ? STAIR_RUN + 0.08 : width;
+    const td = axis === 'x' ? width : STAIR_RUN + 0.08;
+    g.add(rbox(tw, Math.max(0.14, rise * 0.9), td, color, x, topY - rise * 0.4, z, {
+      kind: 'wood',
+      name: `${name}_tread_${i}`,
+    }));
+    if (axis === 'x') {
+      addFloor(ctx.floors, x - STAIR_RUN * 0.55, x + STAIR_RUN * 0.55, landZ - width / 2, landZ + width / 2, topY);
+      addAabb(ctx.colliders, x, topY - treadH * 0.5, landZ, STAIR_RUN * 0.92, treadH, width * 0.92, {
+        kind: 'stair_tread',
+        chain: name,
+        step: i,
+      });
+    } else {
+      addFloor(ctx.floors, landX - width / 2, landX + width / 2, z - STAIR_RUN * 0.55, z + STAIR_RUN * 0.55, topY);
+      addAabb(ctx.colliders, landX, topY - treadH * 0.5, z, width * 0.92, treadH, STAIR_RUN * 0.92, {
+        kind: 'stair_tread',
+        chain: name,
+        step: i,
+      });
+    }
+  }
+  return { footX, footZ, steps, rise };
 }
 
 export function addMeshCollider(colliders, mesh, meta = {}) {
@@ -129,5 +180,14 @@ export function makeCtx(scene) {
     syrupFlows: [],
     belts: [],
     conveyors: [],
+    pointLights: [],
   };
+}
+
+/** Register a PointLight so the map can hide it when the player is far away. */
+export function trackLight(ctx, light, cullPad = 12) {
+  if (!ctx.pointLights) ctx.pointLights = [];
+  light.userData.cullPad = cullPad;
+  ctx.pointLights.push(light);
+  return light;
 }

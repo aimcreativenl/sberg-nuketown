@@ -669,31 +669,29 @@ export class PhysicsManager {
       handle.verticalVel = jumpSpeed != null ? jumpSpeed : PLAYER_JUMP;
     }
 
-    const desiredTranslation = {
-      x: wishVelX * dt,
-      y: handle.verticalVel * dt,
-      z: wishVelZ * dt,
-    };
+    const desired = handle._desired || (handle._desired = { x: 0, y: 0, z: 0 });
+    desired.x = wishVelX * dt;
+    desired.y = handle.verticalVel * dt;
+    desired.z = wishVelZ * dt;
 
-    controller.computeColliderMovement(collider, desiredTranslation);
+    controller.computeColliderMovement(collider, desired);
     const computed = controller.computedMovement();
     const cur = body.translation();
-    const next = {
-      x: cur.x + computed.x,
-      y: cur.y + computed.y,
-      z: cur.z + computed.z,
-    };
+    const next = handle._nextPos || (handle._nextPos = { x: 0, y: 0, z: 0 });
+    next.x = cur.x + computed.x;
+    next.y = cur.y + computed.y;
+    next.z = cur.z + computed.z;
     body.setNextKinematicTranslation(next);
 
     handle.grounded = controller.computedGrounded();
     if (handle.grounded && handle.verticalVel < 0) handle.verticalVel = 0;
 
-    return {
-      x: next.x,
-      y: next.y + handle.height / 2,
-      z: next.z,
-      grounded: handle.grounded,
-    };
+    const result = handle._moveResult || (handle._moveResult = { x: 0, y: 0, z: 0, grounded: false });
+    result.x = next.x;
+    result.y = next.y + handle.height / 2;
+    result.z = next.z;
+    result.grounded = handle.grounded;
+    return result;
   }
 
   /** Current EYE position (feet + height/2 from capsule center) for a controller handle. */

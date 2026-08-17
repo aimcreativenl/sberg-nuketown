@@ -180,6 +180,44 @@ assert(reloadCalled === b0.name, 'onBotReload fired');
 const cover = mgr._pickCoverNear(b0, new THREE.Vector3(0, 0, 8));
 assert(cover === null || cover.isVector3 || cover.x != null, 'cover pick ok');
 
+// Shoot on sight: hide leftover from patrol must not block fire
+let shotCount = 0;
+mgr.cb.onBotShoot = () => {
+  shotCount += 1;
+};
+const shooter = mgr.bots[1];
+shooter.position.set(0, 0, 0);
+shooter.lastPos.copy(shooter.position);
+shooter._prevPos.copy(shooter.position);
+shooter.character.mesh.position.copy(shooter.position);
+shooter.peekState = 'hide';
+shooter.state = 'patrol';
+shooter.underFire = 0;
+shooter.coverHold = 0;
+shooter.coverPoint = null;
+shooter.reloading = false;
+shooter.ammo = 10;
+shooter.fireCooldown = 0;
+shooter.aimTimer = 2;
+shooter.losTimer = 2;
+shooter._losRefresh = 0;
+shooter.dead = false;
+mgr.update(0.05);
+assert(shotCount > 0, `bot fires on LOS without being shot first (shots=${shotCount}, state=${shooter.state}, peek=${shooter.peekState})`);
+assert(shooter.underFire === 0, 'LOS fire does not require underFire');
+
+// Taking damage commits the bot to cover
+const dmg = mgr.bots[2];
+dmg.position.set(0, 0, 0);
+dmg.coverPoint = null;
+dmg.state = 'patrol';
+const dmgResult = mgr.damageBot(dmg.id, 15, { isPlayer: true });
+assert(dmgResult.killed === false, '15 dmg does not kill');
+assert(dmg.underFire > 0, 'underFire after player shot');
+assert(dmg.coverHold > 0, 'coverHold after player shot');
+assert(dmg.state === 'cover', `state cover after shot got ${dmg.state}`);
+assert(dmg.coverPoint, 'picked a cover point after shot');
+
 const report = {
   ok: failures.length === 0,
   roles: [...roles],

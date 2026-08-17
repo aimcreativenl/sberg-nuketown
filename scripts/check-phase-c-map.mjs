@@ -86,7 +86,8 @@ const gameSrc = fs.readFileSync(
   'utf8'
 );
 assert(gameSrc.includes('golden_hour') || gameSrc.includes('sky_golden_hour') || gameSrc.includes('GFX.sunColor'), 'Game golden-hour wiring');
-assert(gameSrc.includes('shadowMap') && !gameSrc.includes('shadowMap.enabled = false'), 'shadows not disabled');
+assert(gameSrc.includes('shadowMap.enabled = true'), 'shadows enabled on the renderer');
+assert(gameSrc.includes('PCFSoftShadowMap'), 'soft shadow filtering kept');
 
 // Sample: many meshes still standard
 let std = 0;

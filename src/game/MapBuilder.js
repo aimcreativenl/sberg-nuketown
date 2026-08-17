@@ -14,6 +14,7 @@ import {
   createCeilingMat,
   PASTEL,
   GFX,
+  boxGeometry,
 } from './materials.js';
 import { roundedBoxGeo } from './softGeo.js';
 import { makeAabbCollider, playerPositionBlocked } from './collision.js';
@@ -45,7 +46,7 @@ function resolveMat(color, opts = {}) {
 
 function box(w, h, d, color, x, y, z, opts = {}) {
   const mat = resolveMat(color, opts);
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  const mesh = new THREE.Mesh(boxGeometry(w, h, d), mat);
   mesh.position.set(x, y, z);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -2335,6 +2336,7 @@ export function buildMap(scene) {
 
   // === PICKET FENCES (scaled yards) — posts + rails + trim caps; solid segment colliders ===
   let fenceColliderCount = 0;
+  const fencePostXZ = [];
   function picketFence(x1, z1, x2, z2) {
     const dx = x2 - x1;
     const dz = z2 - z1;
@@ -2343,12 +2345,7 @@ export function buildMap(scene) {
     const posts = Math.floor(len / 0.55);
     for (let i = 0; i <= posts; i++) {
       const t = i / Math.max(posts, 1);
-      const x = x1 + dx * t;
-      const z = z1 + dz * t;
-      group.add(box(0.1, 1.05, 0.1, COLORS.fence, x, 0.52, z));
-      group.add(box(0.14, 0.14, 0.14, 0xffffff, x, 1.1, z));
-      // Pointed picket tip (bevel cue)
-      group.add(box(0.08, 0.1, 0.08, 0xfffaf5, x, 1.2, z));
+      fencePostXZ.push(x1 + dx * t, z1 + dz * t);
     }
     const midX = (x1 + x2) / 2;
     const midZ = (z1 + z2) / 2;
@@ -2417,6 +2414,29 @@ export function buildMap(scene) {
   picketFence(20, 30, 36, 30);
   void _fenceParent;
   fenceSegments.userData.segmentCount = fenceColliderCount;
+  const nPosts = fencePostXZ.length / 2;
+  if (nPosts > 0) {
+    const dummy = new THREE.Object3D();
+    const addFenceInst = (w, h, d, color, y, instName) => {
+      const mesh = new THREE.InstancedMesh(boxGeometry(w, h, d), createMat(color), nPosts);
+      mesh.name = instName;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false;
+      for (let i = 0; i < nPosts; i++) {
+        dummy.position.set(fencePostXZ[i * 2], y, fencePostXZ[i * 2 + 1]);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      fenceSegments.add(mesh);
+    };
+    addFenceInst(0.1, 1.05, 0.1, COLORS.fence, 0.52, 'fence_posts');
+    addFenceInst(0.14, 0.14, 0.14, 0xffffff, 1.1, 'fence_caps');
+    addFenceInst(0.08, 0.1, 0.08, 0xfffaf5, 1.2, 'fence_tips');
+  }
 
   // === LAMP POSTS (base rings / arm / cap detail) ===
   const lampPositions = [
