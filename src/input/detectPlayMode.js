@@ -46,6 +46,21 @@ export function isTouchPlay(env = {}) {
   return false;
 }
 
+/**
+ * Full-screen “turn sideways” should never cover the start menu, pause, or settings.
+ * Only live combat in portrait is blocked.
+ */
+export function shouldShowRotateHint({
+  touchPlay = false,
+  portrait = false,
+  running = false,
+  paused = false,
+  matchOver = false,
+  settingsOpen = false,
+} = {}) {
+  return !!(touchPlay && portrait && running && !paused && !matchOver && !settingsOpen);
+}
+
 /** Portrait on a touch device — FPS wants landscape. */
 export function isTouchPortrait(env = {}) {
   if (!isTouchPlay(env)) return false;

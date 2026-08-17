@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isTouchPlay, isTouchPortrait } from '../src/input/detectPlayMode.js';
+import { isTouchPlay, isTouchPortrait, shouldShowRotateHint } from '../src/input/detectPlayMode.js';
 import { joystickToKeys, lookIdAfterFireDown, isLookTap } from '../src/input/TouchControls.js';
 import { gyroLookActive, motionToLookRates, screenOrientationAngle } from '../src/input/GyroLook.js';
 
@@ -114,12 +114,65 @@ assert(!html.includes('data-touch="gun1"') && !html.includes('data-touch="gun2"'
 assert(!html.includes('touch-fire-left'), 'no left claw FIRE');
 assert(html.includes('id="weapon-banner"'), 'weapon banner remains for tap-to-swap');
 assert(html.includes('tap to shoot'), 'how-to mentions look-pad tap fire');
+assert(html.includes('id="btn-settings-start"'), 'start Settings button');
+assert(html.includes('id="btn-settings-corner"'), 'touch-corner Settings stays on screen');
+assert(html.includes('id="btn-settings-pause"'), 'pause Settings button');
+assert(html.includes('id="settings-overlay"'), 'settings overlay');
+assert(html.includes('id="graphics-preset-select"'), 'graphics control in settings');
+assert(html.includes('id="sens-touch"'), 'touch sensitivity in settings');
+
+assert(
+  shouldShowRotateHint({
+    touchPlay: true,
+    portrait: true,
+    running: false,
+    paused: false,
+    matchOver: false,
+    settingsOpen: false,
+  }) === false,
+  'rotate hint does not cover the start menu'
+);
+assert(
+  shouldShowRotateHint({
+    touchPlay: true,
+    portrait: true,
+    running: true,
+    paused: true,
+    matchOver: false,
+    settingsOpen: false,
+  }) === false,
+  'rotate hint does not cover pause'
+);
+assert(
+  shouldShowRotateHint({
+    touchPlay: true,
+    portrait: true,
+    running: true,
+    paused: false,
+    matchOver: false,
+    settingsOpen: true,
+  }) === false,
+  'rotate hint does not cover settings'
+);
+assert(
+  shouldShowRotateHint({
+    touchPlay: true,
+    portrait: true,
+    running: true,
+    paused: false,
+    matchOver: false,
+    settingsOpen: false,
+  }) === true,
+  'rotate hint still blocks live portrait combat'
+);
 
 const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../src/style.css'), 'utf8');
 assert(css.includes('(orientation: landscape)'), 'phone landscape start layout');
 assert(css.includes("'brand play'"), 'landscape start is title + actions side by side');
 assert(/html\.touch-play\s+#weapon-banner[\s\S]{0,500}z-index:\s*45/.test(css), 'weapon banner stacks above look pad');
 assert(/\.touch-look[\s\S]{0,280}88px/.test(css), 'look pad sits below the weapon banner');
+assert(/\.settings-overlay[\s\S]{0,80}z-index:\s*90/.test(css), 'settings stacks above rotate hint');
+assert(css.includes('start-settings-fab'), 'touch start Settings FAB');
 
 const touchSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../src/input/TouchControls.js'), 'utf8');
 assert((touchSrc.match(/export function lookIdAfterFireDown/g) || []).length === 1, 'lookIdAfterFireDown exported once');

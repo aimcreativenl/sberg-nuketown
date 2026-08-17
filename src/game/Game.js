@@ -28,7 +28,7 @@ import { GameAudio } from './Audio.js';
 import { GameUI } from './UI.js';
 import { GFX } from './materials.js';
 import { getSettings, setGraphicsPreset, patchSettings, applyToGame } from '../settings/Settings.js';
-import { isTouchPlay, isTouchPortrait } from '../input/detectPlayMode.js';
+import { isTouchPlay, isTouchPortrait, shouldShowRotateHint } from '../input/detectPlayMode.js';
 import { TouchControls } from '../input/TouchControls.js';
 import { GyroLook } from '../input/GyroLook.js';
 import { MenuCamera } from './MenuCamera.js';
@@ -718,14 +718,17 @@ export class Game {
       }
     });
 
-    document.getElementById('btn-settings-start')?.addEventListener('click', () => {
+    const openSettings = () => {
+      this.audio.playUI();
       this.ui.showSettings();
-    });
-    document.getElementById('btn-settings-pause')?.addEventListener('click', () => {
-      this.ui.showSettings();
-    });
+      this._syncTouchChrome();
+    };
+    document.getElementById('btn-settings-start')?.addEventListener('click', openSettings);
+    document.getElementById('btn-settings-corner')?.addEventListener('click', openSettings);
+    document.getElementById('btn-settings-pause')?.addEventListener('click', openSettings);
     document.getElementById('btn-settings-back')?.addEventListener('click', () => {
       this.ui.hideSettings();
+      this._syncTouchChrome();
     });
 
     const howBtn = document.getElementById('btn-how');
@@ -765,6 +768,7 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape' && this.ui.isSettingsOpen?.()) {
         this.ui.hideSettings();
+        this._syncTouchChrome();
         e.preventDefault();
         return;
       }
@@ -2252,7 +2256,16 @@ export class Game {
   _syncTouchChrome() {
     if (!this.touch) return;
     const portrait = !!this.touchPlay && isTouchPortrait();
-    this.touch.setRotateVisible(portrait);
+    this.touch.setRotateVisible(
+      shouldShowRotateHint({
+        touchPlay: this.touchPlay,
+        portrait,
+        running: this.running,
+        paused: this.paused,
+        matchOver: this.matchOver,
+        settingsOpen: !!this.ui?.isSettingsOpen?.(),
+      })
+    );
     const live = this.touchPlay && this.running && !this.paused && !this.matchOver && !portrait;
     if (live) this.touch.show();
     else this.touch.hide();

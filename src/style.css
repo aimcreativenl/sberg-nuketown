@@ -834,6 +834,38 @@ body,
   color: #ffe3a8;
 }
 
+.start-settings-fab {
+  display: none;
+}
+
+html.touch-play .start-settings-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: max(0.55rem, env(safe-area-inset-top));
+  right: max(0.55rem, env(safe-area-inset-right));
+  z-index: 6;
+  pointer-events: auto;
+  min-height: 2.6rem;
+  padding: 0.45rem 0.75rem 0.38rem;
+  font-family: 'Bungee', 'Syne', sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1a1020;
+  background: linear-gradient(180deg, #ffd8c4 0%, #f0b07a 100%);
+  border: 3px solid #1a1020;
+  border-radius: 6px;
+  box-shadow: 0 4px 0 #d08a4a, 0 6px 0 #1a1020;
+  cursor: pointer;
+}
+
+html.touch-play .start-settings-fab:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #1a1020;
+}
+
 .start-credit {
   position: absolute;
   left: max(0.85rem, env(safe-area-inset-left));
@@ -850,6 +882,13 @@ body,
 }
 
 @media (max-width: 640px) {
+  .start-screen {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    align-items: flex-start;
+    padding-top: max(3.4rem, calc(env(safe-area-inset-top) + 3.1rem));
+  }
+
   .start-marks,
   .start-reticle {
     display: none;
@@ -2137,7 +2176,10 @@ kbd {
 }
 
 .settings-overlay {
-  z-index: 62;
+  z-index: 90;
+  pointer-events: auto;
+  padding: max(0.6rem, env(safe-area-inset-top)) max(0.6rem, env(safe-area-inset-right))
+    max(0.6rem, env(safe-area-inset-bottom)) max(0.6rem, env(safe-area-inset-left));
 }
 
 .settings-panel {
@@ -2240,6 +2282,43 @@ html.touch-play .settings-touch-only {
 
 .settings-panel .btn {
   margin-top: 0.5rem;
+}
+
+@media (max-height: 720px), (max-width: 900px), (pointer: coarse) {
+  .settings-overlay {
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
+  }
+
+  .settings-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+    box-shadow: none;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+      max(1.25rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  }
+
+  .settings-field input[type='range'] {
+    min-height: 2.6rem;
+  }
+
+  .settings-field select {
+    min-height: 2.75rem;
+    max-width: 100%;
+    font-size: 1rem;
+  }
+
+  .settings-panel .btn {
+    min-height: 3.1rem;
+    width: 100%;
+  }
 }
 
 #pause-overlay .panel .btn-primary {
@@ -2367,7 +2446,7 @@ html.touch-play .how-touch {
 .rotate-hint {
   position: absolute;
   inset: 0;
-  z-index: 80;
+  z-index: 70;
   display: flex;
   flex-direction: column;
   align-items: center;

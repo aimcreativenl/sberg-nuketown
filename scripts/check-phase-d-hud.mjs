@@ -24,6 +24,7 @@ assert(html.includes('9 AI') || html.includes('AI Bots'), 'AI bots mentioned');
 assert(!html.includes('Weapon Upgrades') || html.includes('1 Pistol'), 'no false upgrades-only pitch');
 assert(html.includes('volume-slider') || html.includes('Volume'), 'volume control in HTML');
 assert(html.includes('btn-settings-start'), 'Settings on start screen');
+assert(html.includes('btn-settings-corner'), 'Settings corner control on start screen');
 assert(html.includes('btn-host') && html.includes('Host Server'), 'Host Server on start screen');
 assert(html.includes('btn-search') && html.includes('Join Server'), 'Join Server on start screen');
 assert(html.includes('class="btn-menu"') || html.includes('btn-menu '), 'start menu options are buttons');

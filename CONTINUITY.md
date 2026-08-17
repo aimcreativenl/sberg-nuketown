@@ -5,10 +5,10 @@
 | | |
 |--|--|
 | **Laatst bijgewerkt** | 2026-08-16 |
-| **Current checkpoint** | `main` `12bfb3d` live — Candy Foundry (Syrup Canal Foundry) |
+| **Current checkpoint** | `main` live — touch Settings + Imagine-siroop / band / bot-difficulty |
 | **Local game** | http://127.0.0.1:5175/ |
 | **Progress dashboard** | http://127.0.0.1:8766/ |
-| **HEAD (typisch)** | `12bfb3d` (`feat: ship Candy Foundry map with flowing syrup, kiosk, and conveyor`) |
+| **HEAD (typisch)** | `0263701` (`feat: Imagine syrup, belt ride, no auto-fire, bot names and difficulty`) |
 | **Branch** | `main` |
 | **Repo** | https://github.com/aimcreativenl/sberg-nuketown |
 | **Game (live)** | https://sberg-nuketown.vercel.app/ |
@@ -51,13 +51,33 @@ Pastel voxel FPS (Nuketown-achtig): **offline PLAY vs 9 bots**, of **online list
 | 5 Maps / 6 Ship | OPEN | Foundry live via start-toggle; geen lobby-vote |
 | **Spawn safety / WASD start** | **DONE** | `86e1cac`; ground-level, escapable, bot-separated spawn selection |
 
-**Aanbevolen next:** lobby map-vote, live TDM/CTF/BR playtest, of Phase 4b.
+**Aanbevolen next:** lobby map-vote, live TDM/CTF/BR playtest, of Phase 4b. Foundry-starttoggle + difficulty staan al live.
 
 ---
 
 ## 3. Sessie-log — wat recent is gedaan (2026-08-16; historical entries retained)
 
 Gebruik dit als “wat al gefixt is, niet opnieuw onderzoeken”.
+
+### 3.00d Touch Settings bereikbaar (2026-08-16)
+
+**What:** Instellingen op telefoon/tablet. Rotate-hint dekt start/pauze/settings niet meer (alleen live portret-combat). Corner **Settings** op het startscherm; overlay scrollbaar (graphics, touch-look, gyro). Tests: `test:touch-play` `test:phase-d-hud`.
+
+**Files:** `detectPlayMode.js` (`shouldShowRotateHint`), `Game.js`, `index.html`, `style.css`, tests.
+
+### 3.00c Foundry polish live — Imagine-siroop, band, auto-vuur, bots (2026-08-16) — **live** `0263701`
+
+Live op `main`: **`0263701`**. Direct daarvoor: `ce89c88` (geen vallende sneeuw in de hangar).
+
+1. **Siroop** — Imagine 2.0 bitmaps (`public/maps/candy-foundry/syrup-{strawberry,chocolate,lemon}.jpg`) op `canal_flow_*`. UV-tick blijft. Geen 128²-lint-`DataTexture` meer op de kanalen.
+2. **Band** — `beltCarryDelta` is occupancy (geen sprint, geen grounded-gate). Player + NetPawn rijden mee na jump/land. Tests in `test:candy-foundry` + `test:mp-sync`.
+3. **Auto-vuur** — `Player.clearFireLatches` op match start; `Weapons.resetAll` + slot-wissel slikt leftover `shoot`/`shootClick` tot een nieuwe trekkerdruk.
+4. **Bots** — nieuwe namen (SHITHEAD, MR. BULLET, …). Startscherm **easy / medium / difficult / extreme** (`sberg-bot-diff`), wijzigt windup/accuracy/hunters/reactie/snelheid/agressie via `BotDifficulty.js`.
+5. Indoor snow blijft uit op Foundry; Nuketown sneeuwt nog.
+
+**Tests:** `test:candy-foundry` `test:phase-a-weapons` `test:phase-b-bots` `test:mp-sync` `build` groen. Live HTML heeft Foundry-toggle + difficulty + `#btn-play`.
+
+**Nog:** lobby map-vote (bewust later). Phone-landscape startscherm (812×375) toont de vier difficulty-knoppen zonder titel-clip.
 
 ### 3.00 Candy Foundry — **lokaal play-ready, niet live** (2026-08-16)
 
