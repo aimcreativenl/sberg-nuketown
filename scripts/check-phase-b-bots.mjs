@@ -218,6 +218,37 @@ assert(dmg.coverHold > 0, 'coverHold after player shot');
 assert(dmg.state === 'cover', `state cover after shot got ${dmg.state}`);
 assert(dmg.coverPoint, 'picked a cover point after shot');
 
+{
+  const walker = mgr.bots[3];
+  walker.dead = false;
+  walker.position.set(4, 0, 4);
+  walker.lastPos.copy(walker.position);
+  walker._prevPos.copy(walker.position);
+  walker.character.mesh.position.copy(walker.position);
+  const before = walker.position.clone();
+  mgr._unstickBot(walker, new THREE.Vector3(1, 0, 0));
+  const hop = Math.hypot(walker.position.x - before.x, walker.position.z - before.z);
+  assert(hop < 0.05, `unstick does not teleport (hop=${hop.toFixed(3)})`);
+  assert((walker.unstickTimer || 0) > 0, 'unstick starts a side-steer');
+}
+
+{
+  const shy = mgr.bots[4];
+  shy.dead = false;
+  shy.position.set(0, 0, 7);
+  shy.velocity.set(0, 0, 0);
+  shy.lastPos.copy(shy.position);
+  shy._prevPos.copy(shy.position);
+  shy.character.mesh.position.copy(shy.position);
+  shy.state = 'attack';
+  shy.stuckTimer = 2;
+  const px = shy.position.x;
+  const pz = shy.position.z;
+  mgr.update(1 / 60);
+  const slide = Math.hypot(shy.position.x - px, shy.position.z - pz);
+  assert(slide < 0.25, `player bubble does not 1m-snap (slide=${slide.toFixed(3)})`);
+}
+
 const report = {
   ok: failures.length === 0,
   roles: [...roles],

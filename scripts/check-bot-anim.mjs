@@ -20,6 +20,15 @@ assert(Math.abs(char.hipL.position.y - 0.95) < 0.05, `hipL.y ~0.95 got ${char.hi
 assert(Math.abs(char.hipR.position.y - 0.95) < 0.05, `hipR.y ~0.95 got ${char.hipR.position.y}`);
 assert(char.legL.position.y < 0, 'leg hangs down from hip');
 assert(char.footL, 'footL exists');
+assert(!!char.kneeL && !!char.kneeR, 'knees exist');
+assert(!!char.elbowL && !!char.elbowR, 'elbows exist');
+assert(!!char.head?.getObjectByName('bot_eye_l'), 'left eye');
+assert(!!char.head?.getObjectByName('bot_eye_r'), 'right eye');
+assert(!!char.head?.getObjectByName('bot_nose'), 'nose');
+assert(!!char.head?.getObjectByName('bot_mouth'), 'mouth');
+assert(!!char.head?.getObjectByName('bot_ear_l'), 'left ear');
+assert(!!char.head?.getObjectByName('bot_ear_r'), 'right ear');
+assert(!!char.head?.getObjectByName('bot_brow_l'), 'angry brow');
 
 // Simulate walk while aiming — legs must swing
 const phases = [];
@@ -36,6 +45,13 @@ for (let i = 0; i < 20; i++) {
 }
 const variance = Math.max(...phases) - Math.min(...phases);
 assert(variance > 0.35, `leg swing while aiming variance ${variance.toFixed(3)} > 0.35`);
+const knees = [];
+for (let i = 0; i < 20; i++) {
+  char.updateAnimation(0.05, { moving: true, moveSpeed: 4.0, grounded: true, aiming: false });
+  knees.push(char.kneeL.rotation.x);
+}
+const kneeVar = Math.max(...knees) - Math.min(...knees);
+assert(kneeVar > 0.25, `knee bends while walking ${kneeVar.toFixed(3)} > 0.25`);
 
 // Idle while not moving — small motion only
 const idle = [];

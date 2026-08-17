@@ -45,6 +45,10 @@ const AGGRO_RANGE = 20;
 const DONUT_RANGE = 12;
 const COMBAT_STOP_DIST = 6.5;
 const PLAYER_MIN_DIST = 3.2;
+/** Max instant player-separation slide (m/s). A full 1m push in one frame looks like a teleport. */
+const PLAYER_SEP_SPEED = 5.2;
+/** How long a blocked bot steers sideways instead of hopping 0.9m. */
+const UNSTICK_BIAS_TIME = 0.75;
 const AIM_WINDUP = 0.35;
 
 function aimWindup() {
@@ -302,6 +306,8 @@ export class BotManager {
       repathTimer: 0,
       shootTimer: 0,
       stuckTimer: 0,
+      unstickTimer: 0,
+      unstickDir: new THREE.Vector3(),
       jumpCooldown: 0,
       velY: 0,
       grounded: true,
@@ -582,9 +588,7 @@ export class BotManager {
 
       if (!bot._prevPos) bot._prevPos = bot.position.clone();
       const preMove = this._preMove.copy(bot.position);
-      if (bot.position.distanceTo(bot.lastPos) < 0.05) bot.stuckTimer += dt;
-      else bot.stuckTimer = 0;
-      bot.lastPos.copy(bot.position);
+      if ((bot.unstickTimer || 0) > 0) bot.unstickTimer = Math.max(0, bot.unstickTimer - dt);
 
       const role = bot.roleDef || BOT_ROLES.hunter;
       const toPlayer =
@@ -771,6 +775,9 @@ export class BotManager {
               dir.x += 1;
             }
           }
+          if ((bot.unstickTimer || 0) > 0 && bot.unstickDir && bot.unstickDir.lengthSq() > 0.01) {
+            dir.addScaledVector(bot.unstickDir, 1.45);
+          }
           if (dir.lengthSq() > 0) dir.normalize();
 
           sprinting =
@@ -869,26 +876,26 @@ export class BotManager {
         didRapierMove = true;
       }
 
-      // Player separation — destination free is NOT enough; path must not tunnel walls
+      // Soft player bubble — slide at PLAYER_SEP_SPEED, never a 1m snap
       if (playerPos) {
         const from = this._from.copy(bot.position);
         const dx = from.x - playerPos.x;
         const dz = from.z - playerPos.z;
         const d = Math.hypot(dx, dz);
         if (d < PLAYER_MIN_DIST) {
+          const need = d < 1e-4 ? PLAYER_MIN_DIST : PLAYER_MIN_DIST - d;
+          const step = Math.min(need, PLAYER_SEP_SPEED * dt);
           const tryPos = this._next.copy(from);
           if (d < 1e-4) {
-            tryPos.x += PLAYER_MIN_DIST;
+            tryPos.x += step;
           } else {
-            tryPos.x += (dx / d) * (PLAYER_MIN_DIST - d);
-            tryPos.z += (dz / d) * (PLAYER_MIN_DIST - d);
+            tryPos.x += (dx / d) * step;
+            tryPos.z += (dz / d) * step;
           }
-          // Full push only if path clear (anti-tunnel through thin house walls)
           if (!botMoveBlocked(from, tryPos, this.mapData.colliders || [])) {
             bot.position.x = tryPos.x;
             bot.position.z = tryPos.z;
           } else {
-            // Axis-split with the same path check
             const onlyX = from.clone();
             onlyX.x = tryPos.x;
             if (!botMoveBlocked(from, onlyX, this.mapData.colliders || [])) {
@@ -957,6 +964,15 @@ export class BotManager {
 
       const moved = Math.hypot(bot.position.x - preMove.x, bot.position.z - preMove.z);
       bot.moveSpeed = dt > 1e-6 ? moved / dt : 0;
+      const wished = Math.hypot(bot.velocity.x, bot.velocity.z) * dt;
+      if (wished > 0.06 && moved < Math.min(0.035, wished * 0.35)) {
+        bot.stuckTimer += dt;
+      } else if (wished <= 0.04) {
+        bot.stuckTimer = Math.max(0, bot.stuckTimer - dt * 2.5);
+      } else {
+        bot.stuckTimer = 0;
+      }
+      bot.lastPos.copy(bot.position);
       bot._prevPos.copy(bot.position);
 
       const reloadT = bot.reloading
@@ -1115,9 +1131,20 @@ export class BotManager {
     });
     if (!result) return;
 
-    bot.position.x = result.x;
+    const dx = result.x - bot.position.x;
+    const dz = result.z - bot.position.z;
+    const step = Math.hypot(dx, dz);
+    const maxStep = bot.vaulting ? BOT_VAULT_AIR_SPEED * dt * 1.4 : BOT_SPRINT * 1.35 * Math.min(dt, 1 / 20);
+    if (!bot.vaulting && step > Math.max(maxStep, 0.2)) {
+      const s = Math.max(maxStep, 0.2) / step;
+      bot.position.x += dx * s;
+      bot.position.z += dz * s;
+      this.physics.setNextTranslation(bot._rapier, bot.position.x, result.y, bot.position.z);
+    } else {
+      bot.position.x = result.x;
+      bot.position.z = result.z;
+    }
     bot.position.y = result.y - BOT_BODY_HEIGHT;
-    bot.position.z = result.z;
     bot.grounded = !!result.grounded;
     bot.velY = bot._rapier.verticalVel || 0;
 
@@ -1164,40 +1191,9 @@ export class BotManager {
     return true;
   }
 
-  /** Soft unstick for Rapier bots — walk-around only (no legacy teleport through solids). */
+  /** Soft unstick for Rapier bots — steer sideways, never hop a meter. */
   _unstickBotRapier(bot, preferDir) {
-    this.cb.doors?.requestOpenNear?.(bot.position, 2.8);
-    const base =
-      preferDir && preferDir.lengthSq() > 0.01
-        ? Math.atan2(preferDir.x, preferDir.z)
-        : bot.yaw;
-    for (let i = 0; i < 8; i++) {
-      const ang = base + (i % 2 === 0 ? 1 : -1) * Math.ceil((i + 1) / 2) * (Math.PI / 5);
-      const tryPos = bot.position.clone();
-      tryPos.x += Math.sin(ang) * 0.9;
-      tryPos.z += Math.cos(ang) * 0.9;
-      if (
-        !this._blocked(tryPos, bot) &&
-        !botMoveBlocked(bot.position, tryPos, this.mapData.colliders || [])
-      ) {
-        bot.position.x = tryPos.x;
-        bot.position.z = tryPos.z;
-        this.physics.setNextTranslation(
-          bot._rapier,
-          bot.position.x,
-          this._botEyeY(bot),
-          bot.position.z
-        );
-        bot.stuckTimer = 0;
-        bot.waypoint = this._pickWaypoint(bot);
-        if ((bot.coverHold || 0) <= 0) bot.coverPoint = null;
-        bot.strafeSign *= -1;
-        return;
-      }
-    }
-    bot.waypoint = this._pickWaypoint(bot);
-    if ((bot.coverHold || 0) <= 0) bot.coverPoint = null;
-    bot.strafeSign *= -1;
+    this._beginUnstickSteer(bot, preferDir);
   }
 
   _integrateBotVertical(bot, dt) {
@@ -1329,38 +1325,25 @@ export class BotManager {
     return null;
   }
 
-  _unstickBot(bot, preferDir) {
+  _beginUnstickSteer(bot, preferDir) {
     this.cb.doors?.requestOpenNear?.(bot.position, 2.8);
-    const colliders = this.mapData.colliders || [];
-    // Prefer walking around; vault only if a fence still blocks the preferred heading
-    const base = preferDir && preferDir.lengthSq() > 0.01 ? Math.atan2(preferDir.x, preferDir.z) : bot.yaw;
-    for (let i = 0; i < 12; i++) {
-      const ang = base + (i % 2 === 0 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 6);
-      const tryPos = bot.position.clone();
-      tryPos.x += Math.sin(ang) * 1.25;
-      tryPos.z += Math.cos(ang) * 1.25;
-      if (
-        !this._blocked(tryPos, bot) &&
-        !botMoveBlocked(bot.position, tryPos, colliders)
-      ) {
-        bot.position.x = tryPos.x;
-        bot.position.z = tryPos.z;
-        bot.stuckTimer = 0;
-        bot.waypoint = this._pickWaypoint(bot);
-        if ((bot.coverHold || 0) <= 0) bot.coverPoint = null;
-        bot.strafeSign *= -1;
-        bot.strafeTimer = 1 + Math.random();
-        return;
-      }
-    }
-    if (preferDir && preferDir.lengthSq() > 0.01 && bot.stuckTimer > 1.0) {
-      const move = preferDir.clone().normalize().multiplyScalar(0.4);
-      if (this._tryBotJumpOver(bot, move)) return;
-    }
+    const base =
+      preferDir && preferDir.lengthSq() > 0.01
+        ? Math.atan2(preferDir.x, preferDir.z)
+        : bot.yaw;
+    bot.strafeSign *= -1;
+    const ang = base + bot.strafeSign * (Math.PI / 2);
+    if (!bot.unstickDir) bot.unstickDir = new THREE.Vector3();
+    bot.unstickDir.set(Math.sin(ang), 0, Math.cos(ang));
+    bot.unstickTimer = UNSTICK_BIAS_TIME;
+    bot.stuckTimer = 0;
     bot.waypoint = this._pickWaypoint(bot);
     if ((bot.coverHold || 0) <= 0) bot.coverPoint = null;
-    bot.stuckTimer = 0;
-    bot.strafeSign *= -1;
+    bot.strafeTimer = 1 + Math.random();
+  }
+
+  _unstickBot(bot, preferDir) {
+    this._beginUnstickSteer(bot, preferDir);
   }
 
   _pickWaypoint(bot) {

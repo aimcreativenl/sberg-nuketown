@@ -49,6 +49,9 @@ export class GameUI {
       hitDrips: el('hit-drips'),
       hitDirs: el('hit-dirs'),
       hitFeedback: el('hit-feedback'),
+      playLoading: el('play-loading'),
+      playLoadingFill: el('play-loading-fill'),
+      playLoadingLabel: el('play-loading-label'),
     };
     this._hitTimer = 0;
     this._headshotTimer = 0;
@@ -85,6 +88,7 @@ export class GameUI {
     this.hideJoin();
     this.hideLobby();
     this.hideMatchCallout();
+    this.hidePlayLoading();
     this.clearHitFeedback();
     // Reset how-to panel each visit
     document.getElementById('start-how')?.classList.add('hidden');
@@ -222,6 +226,30 @@ export class GameUI {
     this.els.victory?.classList.add('hidden');
     this.els.pause?.classList.add('hidden');
     this.hideSettings();
+  }
+
+  /**
+   * PLAY warmup overlay. `progress` is 0–1.
+   * @param {number} [progress]
+   * @param {string} [label]
+   */
+  showPlayLoading(progress = 0, label = 'Warming up graphics…') {
+    const root = this.els.playLoading;
+    if (!root) return;
+    root.classList.remove('hidden');
+    root.setAttribute('aria-hidden', 'false');
+    const pct = Math.max(0, Math.min(1, Number(progress) || 0));
+    if (this.els.playLoadingFill) this.els.playLoadingFill.style.width = `${Math.round(pct * 100)}%`;
+    const track = root.querySelector('.play-loading-track');
+    if (track) track.setAttribute('aria-valuenow', String(Math.round(pct * 100)));
+    if (this.els.playLoadingLabel && label) this.els.playLoadingLabel.textContent = label;
+  }
+
+  hidePlayLoading() {
+    const root = this.els.playLoading;
+    if (!root) return;
+    root.classList.add('hidden');
+    root.setAttribute('aria-hidden', 'true');
   }
 
   showSettings() {

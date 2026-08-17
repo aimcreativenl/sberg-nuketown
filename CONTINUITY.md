@@ -5,10 +5,10 @@
 | | |
 |--|--|
 | **Laatst bijgewerkt** | 2026-08-17 |
-| **Current checkpoint** | `main` live — C-toggle bukken, Foundry silo's/drop-buis, hit-feedback |
+| **Current checkpoint** | `main` live — PLAY warmup, soepelere bots, geen bot-teleports |
 | **Local game** | http://127.0.0.1:5175/ |
 | **Progress dashboard** | http://127.0.0.1:8766/ |
-| **HEAD (typisch)** | latest `main` (C crouch toggle + Foundry dressing + hit feedback) |
+| **HEAD (typisch)** | latest `main` |
 | **Branch** | `main` |
 | **Repo** | https://github.com/aimcreativenl/sberg-nuketown |
 | **Game (live)** | https://sberg-nuketown.vercel.app/ |
@@ -58,6 +58,15 @@ Pastel voxel FPS (Nuketown-achtig): **offline PLAY vs 9 bots**, of **online list
 ## 3. Sessie-log — wat recent is gedaan (2026-08-17; historical entries retained)
 
 Gebruik dit als “wat al gefixt is, niet opnieuw onderzoeken”.
+
+### 3.00f PLAY warmup + soepelere bots (2026-08-17) — **live**
+
+**What:**
+1. **PLAY loading** — shader/texture/physics warmup vóór 3-2-1 (geen hogere mid-match FPS, wel minder start-hitch).
+2. **Bot look** — ronder lichaam, knie/elleboog, 3D boos gezicht (ogen, neus, mond, oren).
+3. **Bot lopen** — geen 0,9m unstick-teleport en geen 1-frame speler-bel snap.
+
+**Tests:** `test:phase-b-bots` `test:bot-anim` `test:phase-d-hud` `build` groen.
 
 ### 3.00e Crouch-toggle, Foundry dressing, hit-feedback (2026-08-17) — **live**
 

@@ -168,6 +168,8 @@ export class Game {
     this._gfx = null;
     this._botAgents = [];
     this._playerPosScratch = new THREE.Vector3();
+    this._warmedMapId = null;
+    this._startingMatch = false;
 
     this._initRenderer();
     this._initScene();
@@ -306,6 +308,7 @@ export class Game {
 
     this.mapData = next;
     this.mapId = pack.id;
+    this._warmedMapId = null;
     this.doors = new DoorManager(this.mapData.doors || []);
     if (this.physics) {
       this.physics.setMapFromMapData(this.mapData);
@@ -698,6 +701,7 @@ export class Game {
   applyGraphicsQuality(preset = getGraphicsPreset()) {
     if (!preset || !this.renderer) return;
     this._gfx = preset;
+    this._warmedMapId = null;
     if (this.bots) this.bots.cpuTier = preset.cpuTier ?? 2;
 
     const dpr = (typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1;
@@ -744,7 +748,9 @@ export class Game {
   }
 
   _bindUI() {
-    document.getElementById('btn-play')?.addEventListener('click', () => this.startMatch());
+    document.getElementById('btn-play')?.addEventListener('click', () => {
+      void this.startMatch();
+    });
     document.getElementById('btn-map-nuketown')?.addEventListener('click', () => {
       this.audio.playUI();
       this.loadMap('nuketown');
@@ -766,7 +772,7 @@ export class Game {
         this.resume();
         return;
       }
-      this.startMatch();
+      void this.startMatch();
     });
     document.getElementById('btn-menu-pause')?.addEventListener('click', () => this.returnToMainMenu());
     document.getElementById('btn-rematch')?.addEventListener('click', () => {
@@ -774,7 +780,7 @@ export class Game {
         this.cancelMultiplayer();
         return;
       }
-      this.startMatch();
+      void this.startMatch();
     });
     document.getElementById('btn-host')?.addEventListener('click', () => this.hostMultiplayer());
     document.getElementById('btn-search')?.addEventListener('click', () => this.openJoinPanel());
@@ -1152,7 +1158,7 @@ export class Game {
   _onLanMatchStart(msg) {
     if (!this._mpActive) return;
     const late = !!msg.late;
-    this.startNetworkMatch({ late });
+    void this.startNetworkMatch({ late });
   }
 
   async hostMultiplayer() {
@@ -1257,10 +1263,20 @@ export class Game {
   /**
    * Phase 2a: lobby countdown done → networked match (host owns combat; remotes via WebRTC).
    */
-  startNetworkMatch({ late = false } = {}) {
+  async startNetworkMatch({ late = false } = {}) {
+    if (this._startingMatch) return;
+    this._startingMatch = true;
     this.audio.unlock();
     this.ui.hideLobby();
     this.ui.hideJoin();
+    this.ui.showPlayLoading(0.05, 'Warming up graphics…');
+    try {
+      await this._warmupForPlay((p, label) => this.ui.showPlayLoading(p, label));
+    } catch (err) {
+      console.warn('[game] network warmup failed', err);
+    }
+    this.ui.hidePlayLoading();
+    this._startingMatch = false;
     this._leaveMenu();
     this.matchMode = getModeById(this.lan?.room?.modeId || 'deathmatch');
     this.matchOver = false;
@@ -1455,9 +1471,25 @@ export class Game {
     });
   }
 
-  startMatch() {
+  async startMatch() {
+    if (this._startingMatch) return;
+    this._startingMatch = true;
     this.audio.unlock();
     this.audio.playUI();
+    this.ui.hideSettings();
+    this.ui.els.start?.classList.add('hidden');
+    this.ui.showPlayLoading(0.04, 'Warming up graphics…');
+    try {
+      await this._warmupForPlay((p, label) => this.ui.showPlayLoading(p, label));
+    } catch (err) {
+      console.warn('[game] warmup failed, starting anyway', err);
+    }
+    this.ui.hidePlayLoading();
+    this._startingMatch = false;
+    this._beginOfflineMatch();
+  }
+
+  _beginOfflineMatch() {
     this._leaveMenu();
     this.matchMode = getModeById('deathmatch');
     this.matchOver = false;
@@ -1494,6 +1526,106 @@ export class Game {
     this._requestPointerLock();
     this._syncTouchChrome();
     this.clock.getDelta();
+  }
+
+  _yieldFrame() {
+    return new Promise((resolve) => {
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+      else setTimeout(resolve, 0);
+    });
+  }
+
+  /**
+   * GPU/shader/physics warmup so the first live frames do not hitch.
+   * Does not raise steady-state FPS — it only pays compile/upload cost before FIGHT.
+   */
+  async _warmupForPlay(onProgress) {
+    const mapId = this.mapId || 'nuketown';
+    const report = (p, label) => {
+      try {
+        onProgress?.(p, label);
+      } catch {
+        /* overlay is optional */
+      }
+    };
+    if (this._warmedMapId === mapId) {
+      report(1, 'Ready');
+      return;
+    }
+
+    report(0.08, 'Physics…');
+    await this._yieldFrame();
+    if (!this.physics) {
+      try {
+        await this.initPhysics();
+      } catch {
+        /* legacy AABB still plays */
+      }
+    }
+
+    report(0.28, 'Uploading textures…');
+    await this._yieldFrame();
+    this._uploadGpuAssets();
+
+    report(0.58, 'Compiling shaders…');
+    await this._yieldFrame();
+    const prevVm = this.weapons?.viewModel?.visible;
+    if (this.weapons?.viewModel) this.weapons.viewModel.visible = true;
+    await this._compilePlayShaders();
+
+    report(0.82, 'Warming the world…');
+    await this._yieldFrame();
+    if (this.physics) {
+      for (let i = 0; i < 8; i++) this.physics.step(1 / 60);
+    }
+    try {
+      this._renderWorldAndViewmodel();
+    } catch {
+      /* first frame can fail if composer is mid-resize */
+    }
+    if (this.weapons?.viewModel && prevVm === false) this.weapons.viewModel.visible = false;
+
+    this._warmedMapId = mapId;
+    report(1, 'Ready');
+    await this._yieldFrame();
+  }
+
+  _uploadGpuAssets() {
+    const r = this.renderer;
+    if (!r || typeof r.initTexture !== 'function') return;
+    this.scene.traverse((obj) => {
+      const raw = obj.material;
+      if (!raw) return;
+      const mats = Array.isArray(raw) ? raw : [raw];
+      for (const mat of mats) {
+        if (!mat) continue;
+        for (const key of ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'alphaMap']) {
+          const tex = mat[key];
+          if (tex && tex.isTexture) {
+            try {
+              r.initTexture(tex);
+            } catch {
+              /* skip a bad map */
+            }
+          }
+        }
+      }
+    });
+  }
+
+  async _compilePlayShaders() {
+    const r = this.renderer;
+    const cam = this.camera;
+    if (!r || !cam) return;
+    const prevMask = cam.layers.mask;
+    cam.layers.enableAll();
+    try {
+      if (typeof r.compileAsync === 'function') await r.compileAsync(this.scene, cam);
+      else if (typeof r.compile === 'function') r.compile(this.scene, cam);
+    } catch {
+      /* compile is best-effort */
+    }
+    cam.layers.mask = prevMask;
   }
 
   _requestPointerLock() {

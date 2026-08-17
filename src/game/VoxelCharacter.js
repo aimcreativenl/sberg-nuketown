@@ -30,13 +30,13 @@ export const PASTEL_OUTFITS = [
 /** Shared character geo/mat pools (Option A Phase 4 perf). */
 const _charMatCache = new Map();
 const _charGeoCache = new Map();
-const CHAR_SOFT_SEGS = 3;
-const CHAR_TINY_SEGS = 2;
+const CHAR_SOFT_SEGS = 4;
+const CHAR_TINY_SEGS = 3;
 
-/** Modest corner radius — soft toy, still blocky pastel DNA. */
+/** Softer toy corners — still pastel, no sharp LEGO slabs. */
 function softRadius(w, h, d) {
   const m = Math.min(w, h, d);
-  return Math.min(0.11, m * 0.35);
+  return Math.min(0.2, m * 0.46);
 }
 
 function charMat(color, kind = 'body') {
@@ -86,7 +86,7 @@ function charSphereGeo(radius, widthSegments = 12, heightSegments = 8) {
   return g;
 }
 
-function charCapsuleGeo(radius, length, capSegments = 4, radialSegments = 8) {
+function charCapsuleGeo(radius, length, capSegments = 6, radialSegments = 12) {
   const key = `capsule_${radius.toFixed(3)}_${length.toFixed(3)}_${capSegments}_${radialSegments}`;
   let g = _charGeoCache.get(key);
   if (!g) {
@@ -124,32 +124,78 @@ function gunPart(w, h, d, color, kind = 'metal') {
   return part(w, h, d, color, kind);
 }
 
-function faceTexture() {
-  if (typeof document === 'undefined') {
-    // Node tests: solid skin color, no canvas
-    const data = new Uint8Array([255, 218, 188, 255]);
-    const tex = new THREE.DataTexture(data, 1, 1);
-    tex.needsUpdate = true;
-    return tex;
-  }
-  const c = document.createElement('canvas');
-  c.width = 16;
-  c.height = 16;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#ffdabc';
-  ctx.fillRect(0, 0, 16, 16);
-  ctx.fillStyle = '#4a3f55';
-  ctx.fillRect(3, 5, 3, 3);
-  ctx.fillRect(10, 5, 3, 3);
-  ctx.fillStyle = '#ff8fab';
-  ctx.fillRect(6, 11, 4, 2);
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(4, 6, 1, 1);
-  ctx.fillRect(11, 6, 1, 1);
-  const tex = new THREE.CanvasTexture(c);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  return tex;
+/** Chunky 3D angry face — readable at combat distance, not a painted quad. */
+function addAngryFace(head, skin) {
+  const ink = 0x3a3048;
+  const white = 0xfff8f2;
+  const iris = 0x2a2030;
+  const blush = 0xf0a8b4;
+
+  const earL = spherePart(0.072, skin);
+  earL.name = 'bot_ear_l';
+  earL.position.set(-0.21, 0.02, 0.01);
+  earL.scale.set(0.72, 1.05, 0.85);
+  head.add(earL);
+  const earR = spherePart(0.072, skin);
+  earR.name = 'bot_ear_r';
+  earR.position.set(0.21, 0.02, 0.01);
+  earR.scale.set(0.72, 1.05, 0.85);
+  head.add(earR);
+
+  const addEye = (side, name) => {
+    const g = new THREE.Group();
+    g.name = name;
+    g.position.set(side * 0.068, 0.028, -0.175);
+    const whiteMesh = spherePart(0.042, white);
+    whiteMesh.scale.set(1.05, 1.12, 0.7);
+    g.add(whiteMesh);
+    const pupil = spherePart(0.024, iris);
+    pupil.position.set(side * 0.006, -0.008, -0.026);
+    g.add(pupil);
+    const glint = spherePart(0.008, 0xffffff);
+    glint.position.set(side * -0.006, 0.006, -0.036);
+    g.add(glint);
+    head.add(g);
+    return g;
+  };
+  addEye(-1, 'bot_eye_l');
+  addEye(1, 'bot_eye_r');
+
+  const browL = part(0.09, 0.028, 0.03, ink, 'body', 0.012);
+  browL.name = 'bot_brow_l';
+  browL.position.set(-0.062, 0.078, -0.182);
+  browL.rotation.z = 0.48;
+  head.add(browL);
+  const browR = part(0.09, 0.028, 0.03, ink, 'body', 0.012);
+  browR.name = 'bot_brow_r';
+  browR.position.set(0.062, 0.078, -0.182);
+  browR.rotation.z = -0.48;
+  head.add(browR);
+
+  const nose = spherePart(0.028, 0xf0c4a4);
+  nose.name = 'bot_nose';
+  nose.position.set(0, -0.012, -0.205);
+  nose.scale.set(0.85, 0.95, 1.15);
+  head.add(nose);
+
+  const mouthL = part(0.055, 0.02, 0.022, ink, 'body', 0.01);
+  mouthL.name = 'bot_mouth';
+  mouthL.position.set(-0.028, -0.068, -0.188);
+  mouthL.rotation.z = 0.42;
+  head.add(mouthL);
+  const mouthR = part(0.055, 0.02, 0.022, ink, 'body', 0.01);
+  mouthR.position.set(0.028, -0.068, -0.188);
+  mouthR.rotation.z = -0.42;
+  head.add(mouthR);
+
+  const cheekL = spherePart(0.022, blush);
+  cheekL.position.set(-0.1, -0.03, -0.16);
+  cheekL.scale.set(1.2, 0.7, 0.5);
+  head.add(cheekL);
+  const cheekR = spherePart(0.022, blush);
+  cheekR.position.set(0.1, -0.03, -0.16);
+  cheekR.scale.set(1.2, 0.7, 0.5);
+  head.add(cheekR);
 }
 
 export class VoxelCharacter {
@@ -171,87 +217,39 @@ export class VoxelCharacter {
     const o = this.outfit;
     const skin = 0xffdabc;
 
-    // Dark silhouette outline shells — bots read against pastel map
-    const outlineMat = new THREE.MeshBasicMaterial({
-      color: 0x3a3048,
-      side: THREE.BackSide,
-      transparent: true,
-      opacity: 0.35,
-    });
-    const addOutline = (w, h, d, parent, y = 0) => {
-      const shell = new THREE.Mesh(charGeo(w * 1.12, h * 1.12, d * 1.12), outlineMat);
-      shell.position.y = y;
-      parent.add(shell);
-      return shell;
-    };
-
     // Hip root — keep y=0.95 (locomotion + hit anchors depend on this)
     this.hips = new THREE.Group();
     this.hips.position.y = 0.95;
     this.mesh.add(this.hips);
 
-    // Torso: clearer waist→chest taper, soft rounded shoulders read
-    this.torso = part(0.5, 0.58, 0.3, o.body);
+    // One soft torso + belt (no stacked chest/stripe plates)
+    this.torso = part(0.5, 0.6, 0.32, o.body, 'body', 0.16);
     this.torso.position.y = 0.34;
     this.hips.add(this.torso);
-    addOutline(0.5, 0.58, 0.3, this.hips, 0.34);
-    // Chest plate / belt for silhouette read
-    const chest = part(0.54, 0.18, 0.32, o.accent);
-    chest.position.y = 0.48;
-    this.hips.add(chest);
-    const waist = part(0.46, 0.1, 0.28, 0x6a5a7a);
-    waist.position.y = 0.08;
+    const waist = part(0.44, 0.09, 0.28, 0x6a5a7a, 'body', 0.04);
+    waist.position.y = 0.07;
     this.hips.add(waist);
-
-    // Accent stripe + collar
-    const stripe = part(0.52, 0.1, 0.31, o.accent);
-    stripe.position.y = 0.32;
-    this.hips.add(stripe);
-    const collar = part(0.42, 0.08, 0.3, 0xfffaf5);
-    collar.position.y = 0.66;
+    const collar = part(0.34, 0.07, 0.26, 0xfffaf5, 'body', 0.035);
+    collar.position.y = 0.64;
     this.hips.add(collar);
 
-    // Neck stub (breaks head-on-box look)
-    const neck = part(0.16, 0.1, 0.16, skin);
-    neck.position.y = 0.72;
+    const neck = spherePart(0.075, skin);
+    neck.position.y = 0.7;
     this.hips.add(neck);
 
-    // Head — soft oval (wider/taller, flatter depth); center stays ~0.88 for hit spheres
-    this.head = part(0.4, 0.42, 0.36, skin);
-    this.head.position.y = 0.88;
-    addOutline(0.4, 0.42, 0.36, this.hips, 0.88);
-    // Ears / jaw hints
-    const earL = part(0.08, 0.12, 0.08, skin);
-    earL.position.set(-0.22, 0.0, 0.0);
-    this.head.add(earL);
-    const earR = part(0.08, 0.12, 0.08, skin);
-    earR.position.set(0.22, 0.0, 0.0);
-    this.head.add(earR);
-    const jaw = part(0.3, 0.1, 0.2, 0xf0c8a8);
-    jaw.position.set(0, -0.18, -0.08);
-    this.head.add(jaw);
-    // Face on front (character forward = -Z)
-    const face = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.34, 0.34),
-      new THREE.MeshStandardMaterial({
-        map: faceTexture(),
-        roughness: 0.75,
-        metalness: 0.05,
-        name: 'bot_face',
-      })
-    );
-    face.position.set(0, 0.02, -0.185);
-    face.rotation.y = Math.PI;
-    this.head.add(face);
+    this.head = spherePart(0.215, skin);
+    this.head.name = 'bot_head';
+    this.head.position.y = 0.89;
+    this.head.scale.set(1.02, 1.08, 0.96);
+    addAngryFace(this.head, skin);
     this.hips.add(this.head);
 
-    // Helmet / hat
-    this.hat = part(0.44, 0.16, 0.44, o.accent);
+    this.hat = part(0.38, 0.13, 0.38, o.accent, 'body', 0.065);
     this.hat.position.y = 1.12;
     this.hat.name = 'bot_hat';
     this.hips.add(this.hat);
-    const brim = part(0.52, 0.05, 0.52, o.body);
-    brim.position.y = 1.02;
+    const brim = part(0.46, 0.04, 0.46, o.body, 'body', 0.02);
+    brim.position.y = 1.04;
     brim.name = 'bot_hat_brim';
     this.hips.add(brim);
 
@@ -268,15 +266,16 @@ export class VoxelCharacter {
       scarfTail.position.set(0.18, 0.48, -0.12);
       acc.add(scarfTail);
     } else if (oi % 3 === 1) {
-      const gog = part(0.34, 0.09, 0.12, 0x4a3f55, 'darkMetal');
-      gog.position.set(0, 1.08, -0.22);
+      // Park goggles on the hat so they do not hide the angry face
+      const gog = part(0.3, 0.07, 0.1, 0x4a3f55, 'darkMetal');
+      gog.position.set(0, 1.18, 0.02);
       gog.name = 'bot_goggles';
       acc.add(gog);
-      const lens = part(0.11, 0.07, 0.04, COLORS_SAFE_SKY(), 'accent');
-      lens.position.set(-0.09, 1.08, -0.27);
+      const lens = part(0.09, 0.055, 0.035, COLORS_SAFE_SKY(), 'accent');
+      lens.position.set(-0.08, 1.18, -0.04);
       acc.add(lens);
-      const lens2 = part(0.11, 0.07, 0.04, COLORS_SAFE_SKY(), 'accent');
-      lens2.position.set(0.09, 1.08, -0.27);
+      const lens2 = part(0.09, 0.055, 0.035, COLORS_SAFE_SKY(), 'accent');
+      lens2.position.set(0.08, 1.18, -0.04);
       acc.add(lens2);
     } else {
       const pouch = part(0.14, 0.18, 0.11, o.body);
@@ -290,88 +289,99 @@ export class VoxelCharacter {
     this.hips.add(acc);
     this.accessory = acc;
 
-    // Soft shoulder pads + segmented arms (upper / forearm / hand)
+    // Soft shoulders + elbow joints (forearm hangs from the elbow)
     this.shoulderL = new THREE.Group();
-    this.shoulderL.position.set(-0.38, 0.56, 0);
+    this.shoulderL.position.set(-0.36, 0.56, 0);
     this.hips.add(this.shoulderL);
-    const padL = spherePart(0.13, o.accent);
+    const padL = spherePart(0.12, o.accent);
     padL.position.set(0, 0.02, 0);
     this.shoulderL.add(padL);
-    this.armL = capsulePart(0.085, 0.18, o.body);
-    this.armL.position.y = -0.18;
+    this.armL = capsulePart(0.078, 0.16, o.body);
+    this.armL.position.y = -0.16;
     this.shoulderL.add(this.armL);
-    const forearmL = capsulePart(0.07, 0.14, o.body);
-    forearmL.position.y = -0.42;
-    this.shoulderL.add(forearmL);
-    const handL = spherePart(0.07, skin);
-    handL.position.y = -0.56;
-    this.shoulderL.add(handL);
+    this.elbowL = new THREE.Group();
+    this.elbowL.position.y = -0.32;
+    this.shoulderL.add(this.elbowL);
+    const forearmL = capsulePart(0.068, 0.14, o.body);
+    forearmL.position.y = -0.14;
+    this.elbowL.add(forearmL);
+    this.handL = spherePart(0.068, skin);
+    this.handL.position.y = -0.28;
+    this.elbowL.add(this.handL);
 
     this.shoulderR = new THREE.Group();
-    this.shoulderR.position.set(0.38, 0.56, 0);
+    this.shoulderR.position.set(0.36, 0.56, 0);
     this.hips.add(this.shoulderR);
-    const padR = spherePart(0.13, o.accent);
+    const padR = spherePart(0.12, o.accent);
     padR.position.set(0, 0.02, 0);
     this.shoulderR.add(padR);
-    this.armR = capsulePart(0.085, 0.18, o.body);
-    this.armR.position.y = -0.18;
+    this.armR = capsulePart(0.078, 0.16, o.body);
+    this.armR.position.y = -0.16;
     this.shoulderR.add(this.armR);
-    const forearmR = capsulePart(0.07, 0.14, o.body);
-    forearmR.position.y = -0.42;
-    this.shoulderR.add(forearmR);
-    const handR = spherePart(0.07, skin);
-    handR.position.y = -0.56;
-    this.shoulderR.add(handR);
+    this.elbowR = new THREE.Group();
+    this.elbowR.position.y = -0.32;
+    this.shoulderR.add(this.elbowR);
+    const forearmR = capsulePart(0.068, 0.14, o.body);
+    forearmR.position.y = -0.14;
+    this.elbowR.add(forearmR);
+    this.handR = spherePart(0.068, skin);
+    this.handR.position.y = -0.28;
+    this.elbowR.add(this.handR);
 
     // Held weapon group (tier updates via setHeldWeapon)
     this.heldWeapon = null;
     this._weaponIndex = -1;
     this.setHeldWeapon(0);
 
-    // Legs: pivot at HIP height (y≈0.95) — thigh + shin segments
+    // Legs: hip pivot + knee joint so the walk actually bends
     this.hipL = new THREE.Group();
-    this.hipL.position.set(-0.15, 0.95, 0);
+    this.hipL.position.set(-0.14, 0.95, 0);
     this.mesh.add(this.hipL);
-    this.legL = capsulePart(0.1, 0.22, o.accent);
+    this.legL = capsulePart(0.095, 0.2, o.accent);
     this.legL.position.y = -0.16;
     this.hipL.add(this.legL);
-    const shinL = capsulePart(0.087, 0.18, o.body);
-    shinL.position.y = -0.42;
-    this.hipL.add(shinL);
-    this.footL = part(0.18, 0.1, 0.28, 0x6a5a7a);
-    this.footL.position.set(0, -0.58, 0.06);
-    this.hipL.add(this.footL);
+    this.kneeL = new THREE.Group();
+    this.kneeL.position.y = -0.34;
+    this.hipL.add(this.kneeL);
+    const shinL = capsulePart(0.082, 0.16, o.body);
+    shinL.position.y = -0.14;
+    this.kneeL.add(shinL);
+    this.footL = part(0.16, 0.08, 0.26, 0x6a5a7a, 'body', 0.04);
+    this.footL.position.set(0, -0.28, 0.06);
+    this.kneeL.add(this.footL);
 
     this.hipR = new THREE.Group();
-    this.hipR.position.set(0.15, 0.95, 0);
+    this.hipR.position.set(0.14, 0.95, 0);
     this.mesh.add(this.hipR);
-    this.legR = capsulePart(0.1, 0.22, o.accent);
+    this.legR = capsulePart(0.095, 0.2, o.accent);
     this.legR.position.y = -0.16;
     this.hipR.add(this.legR);
-    const shinR = capsulePart(0.087, 0.18, o.body);
-    shinR.position.y = -0.42;
-    this.hipR.add(shinR);
-    this.footR = part(0.18, 0.1, 0.28, 0x6a5a7a);
-    this.footR.position.set(0, -0.58, 0.06);
-    this.hipR.add(this.footR);
+    this.kneeR = new THREE.Group();
+    this.kneeR.position.y = -0.34;
+    this.hipR.add(this.kneeR);
+    const shinR = capsulePart(0.082, 0.16, o.body);
+    shinR.position.y = -0.14;
+    this.kneeR.add(shinR);
+    this.footR = part(0.16, 0.08, 0.26, 0x6a5a7a, 'body', 0.04);
+    this.footR.position.set(0, -0.28, 0.06);
+    this.kneeR.add(this.footR);
 
     // Backpack accent (behind character; forward is -Z)
-    const pack = part(0.32, 0.36, 0.12, o.accent);
-    pack.position.set(0, 0.38, 0.2);
+    const pack = part(0.3, 0.32, 0.12, o.accent, 'body', 0.06);
+    pack.position.set(0, 0.36, 0.2);
     pack.name = 'bot_backpack';
     this.hips.add(pack);
-    const packLid = part(0.28, 0.06, 0.1, o.body);
-    packLid.position.set(0, 0.58, 0.2);
+    const packLid = part(0.26, 0.055, 0.1, o.body, 'body', 0.03);
+    packLid.position.set(0, 0.54, 0.2);
     this.hips.add(packLid);
 
-    // Silhouette outline shell on torso for range read (matches soft geo)
     const readShell = new THREE.Mesh(
-      charGeo(0.58, 0.68, 0.38),
+      charGeo(0.56, 0.66, 0.36, 0.18, 4),
       new THREE.MeshBasicMaterial({
         color: 0x2a2435,
         side: THREE.BackSide,
         transparent: true,
-        opacity: 0.28,
+        opacity: 0.16,
       })
     );
     readShell.name = 'bot_read_outline';
@@ -484,7 +494,7 @@ export class VoxelCharacter {
     this._weaponIndex = idx;
 
     if (this.heldWeapon) {
-      this.shoulderR.remove(this.heldWeapon);
+      this.heldWeapon.parent?.remove(this.heldWeapon);
       this.heldWeapon.traverse((c) => {
         if (c.geometry && !c.geometry.userData?.shared) c.geometry.dispose();
         if (c.material && !c.material.userData?.shared) c.material.dispose();
@@ -618,12 +628,12 @@ export class VoxelCharacter {
       g.add(stock);
     }
 
-    // Sit in right hand — points local -Z (character forward after yaw)
-    g.position.set(0.06, -0.5, -0.18);
+    // Sit in the right hand (elbow child) — points local -Z
+    g.position.set(0.04, -0.22, -0.14);
     g.rotation.set(Math.PI / 2 - 0.15, 0, 0.05);
-    g.scale.setScalar(1.2);
+    g.scale.setScalar(1.15);
     this.heldWeapon = g;
-    this.shoulderR.add(g);
+    (this.elbowR || this.shoulderR).add(g);
     this._heldWeaponRestRot = g.rotation.clone();
   }
 
@@ -691,6 +701,8 @@ export class VoxelCharacter {
       this.mesh.rotation.x = Math.min(this.mesh.rotation.x + dt * 3, Math.PI / 2);
       this.hipL.rotation.set(0.2, 0, 0.15);
       this.hipR.rotation.set(-0.15, 0, -0.1);
+      if (this.kneeL) this.kneeL.rotation.x = 0.4;
+      if (this.kneeR) this.kneeR.rotation.x = 0.25;
       return;
     }
     this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, 0, 1 - Math.pow(0.001, dt));
@@ -732,22 +744,28 @@ export class VoxelCharacter {
 
     this.hipL.rotation.x = walkLeg + idleLeg;
     this.hipR.rotation.x = -walkLeg - idleLeg;
-    // Slight outward knee-ish twist + foot plant pitch
-    this.hipL.rotation.z = loco * 0.06;
-    this.hipR.rotation.z = -loco * 0.06;
+    this.hipL.rotation.z = loco * 0.05;
+    this.hipR.rotation.z = -loco * 0.05;
+    // Knee flexes on the passing/recovery side so the leg is not a stiff stick
+    if (this.kneeL) this.kneeL.rotation.x = Math.max(0.04, -swing) * 1.15 * loco + 0.08 * (1 - loco);
+    if (this.kneeR) this.kneeR.rotation.x = Math.max(0.04, swing) * 1.15 * loco + 0.08 * (1 - loco);
     if (this.footL) {
-      this.footL.rotation.x = Math.max(0, -swing) * 0.45 * loco;
-      this.footL.position.z = 0.06 + Math.max(0, swing) * 0.04 * loco;
+      this.footL.rotation.x = Math.max(0, -swing) * 0.35 * loco;
+      this.footL.position.z = 0.06 + Math.max(0, swing) * 0.03 * loco;
     }
     if (this.footR) {
-      this.footR.rotation.x = Math.max(0, swing) * 0.45 * loco;
-      this.footR.position.z = 0.06 + Math.max(0, -swing) * 0.04 * loco;
+      this.footR.rotation.x = Math.max(0, swing) * 0.35 * loco;
+      this.footR.position.z = 0.06 + Math.max(0, -swing) * 0.03 * loco;
     }
 
-    // Torso counter-rotate + lean into run (readable AAA silhouette)
-    this.hips.rotation.y = -swing * 0.12 * loco;
-    this.hips.rotation.x = -0.04 * loco * (sprinting ? 1.4 : 1) - this._aimBlend * 0.05;
-    this.hips.rotation.z = swing * 0.05 * loco;
+    this.hips.rotation.y = -swing * 0.14 * loco;
+    this.hips.rotation.x = -0.06 * loco * (sprinting ? 1.35 : 1) - this._aimBlend * 0.05;
+    this.hips.rotation.z = swing * 0.06 * loco;
+    if (this.head) {
+      this.head.rotation.x = -this.hips.rotation.x * 0.45 + Math.sin(this.animPhase * 0.7) * 0.03;
+      this.head.rotation.y = swing * 0.08 * loco;
+      this.head.rotation.z = -this.hips.rotation.z * 0.5;
+    }
 
     if (reloading) {
       const t = reloadT;
@@ -757,6 +775,8 @@ export class VoxelCharacter {
       this.shoulderL.rotation.x = -0.55 - Math.sin(t * Math.PI) * 0.45;
       this.shoulderL.rotation.z = -0.15;
       this.shoulderL.rotation.y = 0;
+      if (this.elbowR) this.elbowR.rotation.x = 0.7 + Math.sin(t * Math.PI) * 0.35;
+      if (this.elbowL) this.elbowL.rotation.x = 0.85;
       this.setReloading(true, t);
     } else {
       // Arms: full opposite swing when not aiming; reduced swing while aiming (gun stays up)
@@ -779,6 +799,8 @@ export class VoxelCharacter {
       this.shoulderL.rotation.x = THREE.MathUtils.lerp(idleLx, aimLx - aimSway, b);
       this.shoulderL.rotation.z = THREE.MathUtils.lerp(0, aimLz, b);
       this.shoulderL.rotation.y = THREE.MathUtils.lerp(0, aimLy, b);
+      if (this.elbowR) this.elbowR.rotation.x = THREE.MathUtils.lerp(0.18 + Math.max(0, swing) * 0.35 * loco, 0.22, b);
+      if (this.elbowL) this.elbowL.rotation.x = THREE.MathUtils.lerp(0.18 + Math.max(0, -swing) * 0.35 * loco, 0.55, b);
       this.setReloading(false);
       if (this.heldWeapon && this._heldWeaponRestRot) {
         this.heldWeapon.rotation.x = this._heldWeaponRestRot.x - b * 0.15 + kick * 0.25;
@@ -789,17 +811,21 @@ export class VoxelCharacter {
       }
     }
 
-    // Vertical bob + hip settle
     const bob = loco > 0.1 ? Math.abs(swing2) * (0.045 + (sprinting ? 0.025 : 0)) : Math.sin(this.animPhase) * 0.012;
     this.hips.position.y = 0.95 + bob;
+    this.hips.position.x = Math.sin(this.animPhase * 0.5) * (0.012 + loco * 0.02);
     // Keep leg roots locked to hip height as torso bobs slightly via hips only
 
     if (!grounded) {
       this.hipL.rotation.x = THREE.MathUtils.lerp(this.hipL.rotation.x, -0.55, 0.4);
       this.hipR.rotation.x = THREE.MathUtils.lerp(this.hipR.rotation.x, 0.35, 0.4);
+      if (this.kneeL) this.kneeL.rotation.x = 0.85;
+      if (this.kneeR) this.kneeR.rotation.x = 0.45;
       if (!aiming && !reloading) {
         this.shoulderL.rotation.x = -0.7;
         this.shoulderR.rotation.x = 0.45;
+        if (this.elbowL) this.elbowL.rotation.x = 0.5;
+        if (this.elbowR) this.elbowR.rotation.x = 0.35;
       }
     }
   }
@@ -849,39 +875,42 @@ export class VoxelCharacter {
       { kind: 'capsule', a: pelvis, b: chest, radius: 0.28, headshot: false },
     ];
 
-    // Arms: shoulder pad → hand (animated with shoulderL/R)
     if (this.shoulderL) {
+      const handL = this.handL ? this._wp(this.handL, 0, 0, 0) : this._wp(this.shoulderL, 0, -0.56, 0);
       volumes.push({
         kind: 'capsule',
         a: this._wp(this.shoulderL, 0, 0.02, 0),
-        b: this._wp(this.shoulderL, 0, -0.56, 0),
+        b: handL,
         radius: 0.13,
         headshot: false,
       });
     }
     if (this.shoulderR) {
+      const handR = this.handR ? this._wp(this.handR, 0, 0, 0) : this._wp(this.shoulderR, 0, -0.56, 0);
       volumes.push({
         kind: 'capsule',
         a: this._wp(this.shoulderR, 0, 0.02, 0),
-        b: this._wp(this.shoulderR, 0, -0.56, 0),
+        b: handR,
         radius: 0.13,
         headshot: false,
       });
     }
 
-    // Legs + feet (hipL/R animate with run cycle)
-    for (const hip of [this.hipL, this.hipR]) {
+    const legs = [
+      [this.hipL, this.kneeL, this.footL],
+      [this.hipR, this.kneeR, this.footR],
+    ];
+    for (const [hip, knee, foot] of legs) {
       if (!hip) continue;
-      const thigh = this._wp(hip, 0, -0.16, 0);
-      const shin = this._wp(hip, 0, -0.42, 0);
-      const ankle = this._wp(hip, 0, -0.58, 0.02);
-      const toe = this._wp(hip, 0, -0.58, 0.16);
+      const hipP = hip.getWorldPosition(new THREE.Vector3());
+      const kneeP = knee ? this._wp(knee, 0, 0, 0) : this._wp(hip, 0, -0.34, 0);
+      const ankle = foot ? this._wp(foot, 0, 0, 0) : this._wp(hip, 0, -0.58, 0.02);
+      const toe = foot ? this._wp(foot, 0, 0, 0.12) : this._wp(hip, 0, -0.58, 0.16);
       volumes.push(
-        { kind: 'capsule', a: hip.getWorldPosition(new THREE.Vector3()), b: shin, radius: 0.14, headshot: false },
-        { kind: 'capsule', a: shin, b: ankle, radius: 0.13, headshot: false },
+        { kind: 'capsule', a: hipP, b: kneeP, radius: 0.14, headshot: false },
+        { kind: 'capsule', a: kneeP, b: ankle, radius: 0.13, headshot: false },
         { kind: 'sphere', center: ankle, radius: 0.14, headshot: false },
-        { kind: 'sphere', center: toe, radius: 0.13, headshot: false },
-        { kind: 'sphere', center: thigh, radius: 0.15, headshot: false }
+        { kind: 'sphere', center: toe, radius: 0.13, headshot: false }
       );
     }
 

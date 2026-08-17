@@ -126,6 +126,24 @@
         </button>
       </div>
 
+      <div id="play-loading" class="play-loading hidden" aria-hidden="true">
+        <div class="play-loading-card">
+          <p class="play-loading-title">LOADING</p>
+          <p id="play-loading-label" class="play-loading-label">Warming up graphics…</p>
+          <div
+            class="play-loading-track"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+            aria-labelledby="play-loading-label"
+          >
+            <div id="play-loading-fill" class="play-loading-fill"></div>
+          </div>
+          <p class="play-loading-hint">Compiling shaders so the first shots stay smooth</p>
+        </div>
+      </div>
+
       <!-- Multiplayer: join by invite code -->
       <div id="join-screen" class="overlay lobby-overlay hidden">
         <div class="panel lobby-panel">
